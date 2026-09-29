@@ -519,6 +519,55 @@ button, input { font: inherit; color: inherit; }
 
 .disclaimer { margin: 0; color: var(--text-faint); font-size: 0.72rem; }
 
+/* Aba privada "Minha carteira" */
+.private-dialog {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+.private-dialog::backdrop { background: rgba(2, 6, 10, 0.78); backdrop-filter: blur(4px); }
+.private-panel { max-height: calc(100vh - 48px); background-color: var(--panel-solid); }
+.private-panel .panel-title { color: var(--amber); }
+.private-panel .panel-title::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+.private-lock {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 36px 20px 30px;
+  text-align: center;
+}
+.private-lock .chat-input { width: min(320px, 100%); flex: none; text-align: center; letter-spacing: 0.2em; }
+.private-status { margin: 0; min-height: 1.2em; color: var(--amber); font-size: 0.8rem; }
+.icon-xl { width: 34px; height: 34px; color: var(--amber); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.pf { padding: 14px; display: grid; gap: 16px; }
+.pf .panel-note { margin: -14px -14px 0; }
+.pf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pf .val small { font-weight: 400; margin-left: 4px; }
+.table-wrap { overflow-x: auto; }
+.positions { min-width: 560px; }
+
+.alloc-bar { display: flex; height: 8px; gap: 2px; }
+.alloc-bar > span { display: block; height: 100%; }
+.alloc-legend { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.78rem; color: var(--text-dim); }
+.alloc-legend li { display: flex; align-items: center; gap: 6px; }
+.alloc-legend i { width: 8px; height: 8px; display: inline-block; }
+.alloc-legend b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-acao { background: var(--cyan); }
+.t-fii { background: var(--amber); }
+.t-etf { background: var(--teal); }
+.t-bdr { background: var(--violet); }
+.t-intl { background: var(--green); }
+.t-td { background: var(--text-dim); }
+
+.list.compact .item { padding: 6px 0; grid-template-columns: 64px 1fr auto; column-gap: 8px; font-size: 0.82rem; }
+.list.compact .ticker { font-weight: 600; color: var(--text); }
+.list.compact .muted { color: var(--text-dim); }
+.list.compact .amount { font-variant-numeric: tabular-nums; color: var(--green); }
+
 /* Briefing */
 .panel-briefing .panel-body { overflow: visible; }
 .briefing { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 14px 14px; }

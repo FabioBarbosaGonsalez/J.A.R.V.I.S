@@ -4,6 +4,7 @@ import { getJSON, postJSON } from './api.js';
 import { createCore } from './core.js';
 import { h } from './dom.js';
 import { loadAll, loadPanel, panelData, repaintTimeSensitive } from './panels.js';
+import { openPrivate, privateOpen } from './private.js';
 import { typeText } from './typewriter.js';
 import { createVoice } from './voice.js';
 
@@ -181,6 +182,7 @@ document.addEventListener('keydown', (event) => {
     stopEverything();
     return;
   }
+  if (privateOpen()) return; // com a carteira aberta, o Espaço não aciona o microfone
   if (event.code !== 'Space' || !spaceTalks(event.target) || event.ctrlKey || event.altKey || event.metaKey) return;
   event.preventDefault(); // não rolar a página, não digitar espaços nem "clicar" o botão focado
   if (event.repeat || pushToTalk || voice.listening) return;
@@ -239,6 +241,7 @@ document.addEventListener('click', (event) => {
   if (!button) return;
   const panel = button.closest('[data-panel]')?.dataset.panel;
   if (button.dataset.action === 'refresh' && panel) loadPanel(panel, { force: true });
+  if (button.dataset.action === 'private') openPrivate();
   if (button.dataset.action === 'speak-briefing') {
     const briefing = panelData('briefing');
     if (!briefing) return;

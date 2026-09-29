@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # A cota restante vem da própria brapi, em cada resposta.
     brapi_tickers_per_request: int = Field(default=1, ge=1, le=20)
 
+    # Aba privada "Minha carteira": sem chave, a aba fica desativada
+    portfolio_access_key: SecretStr | None = None
+    private_session_minutes: int = Field(default=5, ge=1, le=120)
+
     # Google (Fase 3)
     google_credentials_file: str = "credentials.json"
     google_token_file: str = "token.json"

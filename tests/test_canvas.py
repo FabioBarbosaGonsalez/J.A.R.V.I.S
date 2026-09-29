@@ -89,7 +89,7 @@ def run(fake, cache, force=False, **settings):
 def test_not_configured_without_token_or_feed(cache):
     res = run(FakeCanvas(), cache, canvas_token=None)
     assert res.status == "not_configured"
-    assert "CANVAS_TOKEN" in res.message
+    assert "falta o token de acesso" in res.message
 
 
 def test_api_statuses_courses_and_order(cache):

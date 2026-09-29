@@ -58,7 +58,7 @@ def load(settings: Settings, cache: Cache, http: httpx.Client, force: bool = Fal
     if not token and not ics_url:
         return PanelResponse(
             status="not_configured", source="live", updated_at=now,
-            message="Defina CANVAS_TOKEN ou CANVAS_ICS_URL no arquivo .env.",
+            message="Canvas não configurado: falta o token de acesso ou o link do feed do calendário.",
         )
 
     with _lock:

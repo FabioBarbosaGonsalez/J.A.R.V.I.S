@@ -22,7 +22,7 @@ from app.connectors.http import ConnectorError, get
 
 QUOTE_URL = "https://brapi.dev/api/v2/stocks/quote"
 
-ERRORS = {401: "A brapi recusou o token. Confira BRAPI_TOKEN no .env."}
+ERRORS = {401: "A brapi recusou o token. Confira o token configurado."}
 
 
 class BrapiQuote(BaseModel):

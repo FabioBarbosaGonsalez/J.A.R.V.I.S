@@ -35,7 +35,9 @@ from app.connectors import brapi
 from app.connectors.fx import fetch_usd_brl
 from app.connectors.http import ConnectorError
 from app.formatting import normalize
-from app.models import AssetQuote, AssetType, FxQuote, Market, PanelResponse, Portfolio, Position
+from app.models import (
+    AssetQuote, AssetType, FxQuote, Market, PanelResponse, Portfolio, Position, UnquotedPosition,
+)
 
 QUOTE_TTL = 30 * 60
 FX_TTL = 60
@@ -96,7 +98,7 @@ def read_portfolio(path: Path) -> list[Holding]:
     reader.fieldnames = [normalize(f).strip().replace(" ", "_") for f in reader.fieldnames or []]
     missing = COLUMNS - set(reader.fieldnames)
     if missing:
-        raise PortfolioFileError(f"Faltam colunas no carteira.csv: {', '.join(sorted(missing))}.")
+        raise PortfolioFileError(f"Faltam colunas na carteira: {', '.join(sorted(missing))}.")
 
     merged: dict[str, Holding] = {}
     for line_no, row in enumerate(reader, start=2):
@@ -259,10 +261,10 @@ def _collect(settings: Settings, cache: Cache, http: httpx.Client, portfolio_fil
         return PanelResponse(status=status, source="live", updated_at=now, message=message)
 
     if not portfolio_file.exists():
-        return respond("not_configured", "Crie data/carteira.csv a partir de data/carteira.example.csv.")
+        return respond("not_configured", "Carteira não encontrada: cadastre as suas posições.")
     token = secret(settings.brapi_token)
     if not token:
-        return respond("not_configured", "Defina BRAPI_TOKEN no arquivo .env (o token é gratuito).")
+        return respond("not_configured", "Mercado não configurado: falta o token da brapi (gratuito).")
     try:
         holdings = read_portfolio(portfolio_file)
     except PortfolioFileError as exc:
@@ -321,22 +323,23 @@ def load_market(settings: Settings, cache: Cache, http: httpx.Client, portfolio_
 
 
 def load_portfolio(settings: Settings, cache: Cache, http: httpx.Client, portfolio_file: Path) -> PanelResponse[Portfolio]:
-    """Carteira em reais. Não aparece na home; alimenta o briefing (só em %) e a IA."""
+    """Carteira em reais. Só aparece na aba privada; alimenta o briefing (só em %) e a IA."""
     now = datetime.now(settings.tz)
     collected = _collect(settings, cache, http, portfolio_file)
     if isinstance(collected, PanelResponse):
         return collected
     c = collected
 
-    positions, left_out = [], []
+    positions, unquoted, left_out = [], [], []
     for h in c.holdings:
         entry = c.quotes.get(h.ticker)
-        if entry is None:
-            left_out.append(h.ticker)
-            continue
-        q = entry.value
-        if q["currency"] == "USD" and not c.fx:
-            left_out.append(h.ticker)
+        q = entry.value if entry else None
+        if q is None or (q["currency"] == "USD" and not c.fx):
+            # Sem cotação (ou sem dólar para converter): mostra o valor aplicado, fora dos totais
+            unquoted.append(UnquotedPosition(
+                ticker=h.ticker, asset_type=h.asset_type, quantity=h.quantity, avg_price=h.avg_price))
+            if h.quoted:
+                left_out.append(h.ticker)  # devia ter cotação: vale um aviso
             continue
         positions.append(Position(
             ticker=h.ticker, asset_type=h.asset_type, quantity=h.quantity, avg_price=h.avg_price,
@@ -356,5 +359,5 @@ def load_portfolio(settings: Settings, cache: Cache, http: httpx.Client, portfol
         source="live" if all(p.ticker in c.fetch.fetched for p in positions) else "cache",
         updated_at=oldest,
         message=" ".join(notes) or None,
-        data=Portfolio(positions=positions),
+        data=Portfolio(positions=positions, unquoted=unquoted),
     )

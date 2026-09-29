@@ -53,7 +53,7 @@ def test_reads_quota_headers():
 
 
 @pytest.mark.parametrize("status, body, expected", [
-    (401, {"error": True, "message": "Token inválido"}, "Confira BRAPI_TOKEN"),
+    (401, {"error": True, "message": "Token inválido"}, "recusou o token"),
     (400, {"error": True, "message": "Seu plano permite no máximo 1 ativo(s) por requisição."}, "no máximo 1 ativo"),
     (429, {"error": True}, "Limite de requisições"),
     (503, {"error": True}, "instável"),

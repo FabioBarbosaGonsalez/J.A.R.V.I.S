@@ -63,7 +63,7 @@ A documentação interativa da API fica em http://127.0.0.1:8000/api/docs.
 - **Voz das respostas:** o botão de alto-falante ao lado do campo liga e desliga a fala.
 - **Briefing em voz alta:** o botão de alto-falante no painel do briefing.
 - **Sistemas:** o indicador no topo mostra quantas fontes (agenda, e-mails, faculdade e mercado) estão online. Passe o mouse para ver o estado de cada uma.
-- **Atualizar:** cada painel tem seu botão ↻, e o botão "Atualizar" no topo recarrega todos, buscando dados novos. A atualização automática roda a cada `REFRESH_SECONDS` (padrão: 5 minutos) e aproveita o cache. As cotações respeitam sempre o cache de 30 minutos, por causa do limite do plano gratuito.
+- **Atualizar:** cada painel tem seu botão ↻, e o botão "Atualizar" no topo recarrega todos, buscando dados novos. A atualização automática roda a cada `REFRESH_SECONDS` (padrão: 10 minutos) e aproveita o cache. As cotações respeitam sempre o cache de 30 minutos, por causa do limite do plano gratuito.
 - **Avisos nos painéis:** a faixa âmbar no topo de um painel explica algo sobre os dados, por exemplo "usando o feed do calendário" ou "mostrando cotações de 14:30". "dados de 14:30" no cabeçalho do painel indica que os dados vieram do cache.
 
 No modo demonstração, o chat entende perguntas sobre **entregas, e-mails, agenda e carteira**. Na Fase 4 ele passa a usar IA.
@@ -163,6 +163,29 @@ Com cerca de 20 ativos, isso dá no máximo umas 7.600 requisições por mês, m
 
 O painel apenas descreve o mercado. Ele não faz recomendação de compra ou venda.
 
+### Aba privada "Minha carteira"
+
+O botão de cadeado no painel Mercado abre a sua carteira completa: patrimônio, variação do dia, resultado sobre o preço médio, distribuição por tipo, posições (quantidade, preço médio, preço e valor) e os ativos sem cotação ao vivo, como o Tesouro Direto, pelo valor aplicado.
+
+1. No `.env`, defina uma chave que só você saiba, com **10 caracteres ou mais** (mais curta, a aba fica desativada):
+
+   ```
+   PORTFOLIO_ACCESS_KEY=sua-chave-aqui
+   PRIVATE_SESSION_MINUTES=5
+   ```
+
+2. Reinicie o servidor. Sem a chave, a aba fica desativada.
+
+Como a proteção funciona:
+
+- a chave é conferida só no servidor, com comparação em tempo constante, e nunca aparece em logs, na URL nem no código da página;
+- a carteira só sai de `/api/private/portfolio`, que exige a sessão desbloqueada, com `Cache-Control: no-store`; não existe outra rota que devolva quantidades ou valores;
+- a sessão fica num cookie `HttpOnly` e `SameSite=Strict`, expira após `PRIVATE_SESSION_MINUTES` sem uso e acaba no botão **Bloquear** ou ao reiniciar o servidor;
+- depois de 3 erros, cada tentativa espera o dobro da anterior (5 s, 10 s, 20 s... até 5 minutos);
+- fechar a janela, apertar Esc, trocar de aba ou minimizar apaga os dados da tela.
+
+O objetivo é que a carteira não apareça na tela do Jarvis para quem estiver olhando. O arquivo `data/carteira.csv` continua sendo um arquivo comum no seu computador.
+
 ## Estrutura
 
 ```
@@ -186,6 +209,7 @@ jarvis/
 - O servidor escuta **somente em `127.0.0.1`**; não é acessível por outros dispositivos da rede.
 - Requisições com o header `Host` diferente de `127.0.0.1` ou `localhost` são recusadas. Isso protege contra *DNS rebinding*: um site malicioso aberto no seu navegador não consegue ler os dados do painel.
 - Requisições que alteram algo (como o chat) vindas de outros sites são bloqueadas.
+- A interface nunca cita nomes de arquivos (`.env`, `carteira.csv`...) nem de variáveis de configuração. Quando falta algo, o painel mostra uma mensagem genérica, e o terminal onde você rodou `python -m app` diz exatamente o que configurar e onde.
 - Todo texto vindo das fontes é inserido na página como texto puro, nunca como HTML. Um e-mail com código malicioso no assunto não é executado.
 - Chaves e tokens ficam só no `.env`, que o `.gitignore` exclui, assim como `credentials.json`, `token.json`, a pasta `data/` e bancos SQLite.
 - As integrações só leem dados: o cliente HTTP dos conectores recusa qualquer método diferente de GET antes de a requisição sair do computador.

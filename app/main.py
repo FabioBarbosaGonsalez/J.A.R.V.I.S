@@ -5,13 +5,13 @@ from datetime import datetime
 from typing import Annotated, Callable, Literal
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import __version__, sources
-from app.config import STATIC_DIR, Settings, get_settings
+from app import __version__, private, sources
+from app.config import STATIC_DIR, Settings, get_settings, secret
 from app.llm.briefing import build_rule_briefing
 from app.llm.chat import demo_reply
 from app.models import (
@@ -24,7 +24,9 @@ from app.models import (
     Market,
     PanelResponse,
     Portfolio,
+    PrivateStatus,
     StatusResponse,
+    UnlockRequest,
 )
 
 # No Windows, o registro às vezes associa .js a "text/plain", e o navegador
@@ -128,10 +130,74 @@ def get_market(settings: SettingsDep, simulate: Simulate = None):
     return _panel(sources.market_panel, settings, simulate)
 
 
-@app.get("/api/portfolio", response_model=PanelResponse[Portfolio])
-def get_portfolio(settings: SettingsDep, simulate: Simulate = None):
-    """Carteira em reais (não aparece na home)."""
-    return _panel(sources.portfolio_panel, settings, simulate)
+# --- Aba privada "Minha carteira" ---------------------------------------------
+# A carteira completa só sai de /api/private/portfolio, com a sessão desbloqueada.
+
+NO_STORE = {"Cache-Control": "no-store"}  # nada da aba privada fica no cache do navegador
+
+
+def _access_key(settings: Settings) -> str:
+    """A chave configurada, ou "" se faltar ou for curta demais (aba desativada)."""
+    key = secret(settings.portfolio_access_key)
+    return "" if private.key_problem(key) else key
+
+
+def _session_ok(request: Request, settings: Settings) -> bool:
+    token = request.cookies.get(private.COOKIE_NAME)
+    return private.sessions.check(token, settings.private_session_minutes * 60)
+
+
+@app.get("/api/private/status", response_model=PrivateStatus)
+def private_status(request: Request, settings: SettingsDep, response: Response):
+    response.headers.update(NO_STORE)
+    problem = private.key_problem(secret(settings.portfolio_access_key))
+    return PrivateStatus(
+        enabled=problem is None,
+        unlocked=problem is None and _session_ok(request, settings),
+        session_minutes=settings.private_session_minutes,
+        message=problem,
+    )
+
+
+@app.post("/api/private/unlock")
+def private_unlock(body: UnlockRequest, settings: SettingsDep):
+    key = _access_key(settings)
+    if not key:
+        problem = private.key_problem(secret(settings.portfolio_access_key))
+        return JSONResponse({"detail": problem}, 403, headers=NO_STORE)
+
+    result = private.sessions.unlock(body.key, key)
+    if not result.ok:
+        if result.retry_after:
+            return JSONResponse(
+                {"detail": f"Muitas tentativas. Aguarde {result.retry_after} s.", "retry_after": result.retry_after},
+                429, headers={**NO_STORE, "Retry-After": str(result.retry_after)})
+        return JSONResponse({"detail": "Chave incorreta."}, 401, headers=NO_STORE)
+
+    response = JSONResponse({"unlocked": True}, headers=NO_STORE)
+    response.set_cookie(
+        private.COOKIE_NAME, result.token, path=private.COOKIE_PATH,
+        httponly=True, samesite="strict", max_age=settings.private_session_minutes * 60,
+    )
+    return response
+
+
+@app.post("/api/private/lock")
+def private_lock(request: Request):
+    private.sessions.lock(request.cookies.get(private.COOKIE_NAME))
+    response = JSONResponse({"unlocked": False}, headers=NO_STORE)
+    response.delete_cookie(private.COOKIE_NAME, path=private.COOKIE_PATH)
+    return response
+
+
+@app.get("/api/private/portfolio", response_model=PanelResponse[Portfolio])
+def private_portfolio(request: Request, settings: SettingsDep, response: Response):
+    response.headers.update(NO_STORE)
+    if not _access_key(settings):
+        return JSONResponse({"detail": "Aba privada desativada."}, 403, headers=NO_STORE)
+    if not _session_ok(request, settings):
+        return JSONResponse({"detail": "Aba bloqueada."}, 401, headers=NO_STORE)
+    return sources.portfolio_panel(settings)
 
 
 @app.get("/api/briefing", response_model=PanelResponse[Briefing])

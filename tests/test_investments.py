@@ -178,7 +178,7 @@ def portfolio(*args, **kwargs):
 def test_not_configured_without_file_or_token(cache, tmp_path, portfolio_file):
     assert market(FakeApis(), cache, tmp_path / "nao-existe.csv").status == "not_configured"
     res = market(FakeApis(), cache, portfolio_file, brapi_token=None)
-    assert res.status == "not_configured" and "BRAPI_TOKEN" in res.message
+    assert res.status == "not_configured" and "token da brapi" in res.message
 
 
 def test_market_shows_dollar_and_quotes_without_amounts(cache, portfolio_file):
@@ -224,7 +224,11 @@ def test_portfolio_converts_dollar_assets(cache, portfolio_file):
     voo = next(p for p in res.data.positions if p.ticker == "VOO")
     assert (voo.currency, voo.fx, voo.market_value, voo.cost) == ("USD", USD_BRL, 1750.0, 1500.0)
     assert voo.result_pct == pytest.approx(16.67)  # medido em dólar, sem efeito do câmbio
-    assert "Tesouro Selic 2031" in res.message  # fora dos totais, sem cotação
+    # Tesouro: sem cotação ao vivo, aparece com o valor aplicado, fora dos totais e sem aviso
+    [bond] = res.data.unquoted
+    assert (bond.ticker, bond.cost) == ("Tesouro Selic 2031", 3000.0)
+    assert res.message is None
+    assert all(p.ticker != "Tesouro Selic 2031" for p in res.data.positions)
 
 
 def test_unknown_ticker_does_not_hide_the_rest(cache, portfolio_file):
@@ -294,5 +298,5 @@ def test_no_dollar_at_all_keeps_quotes(cache, portfolio_file):
 
 def test_error_when_token_is_rejected_and_nothing_cached(cache, portfolio_file):
     res = portfolio(FakeApis(fail={"PETR4": 401}), cache, portfolio_file)
-    assert res.status == "error" and "BRAPI_TOKEN" in res.message
+    assert res.status == "error" and "recusou o token" in res.message
     assert TOKEN not in res.message

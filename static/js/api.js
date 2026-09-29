@@ -49,7 +49,17 @@ async function request(path, options = {}) {
       : 'Sem conexão com o servidor local.';
     throw new Error(message);
   }
-  if (!response.ok) throw new Error(`O servidor respondeu com erro ${response.status}.`);
+  if (!response.ok) {
+    // Usa a explicação do servidor ("Chave incorreta.", "Aguarde 10 s."), quando houver
+    let detail = null;
+    try {
+      detail = (await response.json()).detail;
+    } catch { /* corpo sem JSON */ }
+    const error = new Error(typeof detail === 'string' ? detail : `O servidor respondeu com erro ${response.status}.`);
+    error.status = response.status;
+    error.retryAfter = Number(response.headers.get('Retry-After')) || 0;
+    throw error;
+  }
   return response.json();
 }
 

@@ -147,9 +147,25 @@ class Allocation(BaseModel):
     pct: float
 
 
+class UnquotedPosition(BaseModel):
+    """Posição sem cotação ao vivo (ex.: Tesouro Direto). Fica fora dos totais."""
+
+    ticker: str
+    asset_type: AssetType
+    quantity: float
+    avg_price: float
+
+    @computed_field
+    @property
+    def cost(self) -> float:
+        """Valor aplicado: quantidade x preço médio."""
+        return round(self.quantity * self.avg_price, 2)
+
+
 class Portfolio(BaseModel):
     positions: list[Position]
     dividends: list[Dividend] = []
+    unquoted: list[UnquotedPosition] = []
 
     @computed_field
     @property
@@ -237,6 +253,17 @@ class Briefing(BaseModel):
     highlights: list[Highlight] = []
     generated_at: datetime
     generator: Literal["rules", "ai"] = "rules"
+
+
+class UnlockRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=200)
+
+
+class PrivateStatus(BaseModel):
+    enabled: bool  # há uma chave de acesso válida configurada
+    unlocked: bool
+    session_minutes: int
+    message: str | None = None  # por que está desativada
 
 
 class ChatRequest(BaseModel):

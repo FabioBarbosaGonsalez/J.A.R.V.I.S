@@ -4,7 +4,7 @@ from tests.conftest import make_settings
 from app.config import get_settings
 from app.main import app
 
-PANEL_ROUTES = ["/api/emails", "/api/calendar", "/api/canvas", "/api/portfolio", "/api/market", "/api/briefing"]
+PANEL_ROUTES = ["/api/emails", "/api/calendar", "/api/canvas", "/api/market", "/api/briefing"]
 
 
 def test_index_is_served(client):
@@ -43,9 +43,8 @@ def test_simulated_states(client, route, state):
 
 
 @pytest.mark.parametrize("route, hint", [
-    ("/api/canvas", "CANVAS_TOKEN"),
-    ("/api/portfolio", "carteira.csv"),
-    ("/api/market", "carteira.csv"),
+    ("/api/canvas", "falta o token de acesso ou o link do feed"),
+    ("/api/market", "Carteira não encontrada"),
     ("/api/emails", "Fase 3"),
     ("/api/calendar", "Fase 3"),
 ])
@@ -120,7 +119,10 @@ def test_allows_same_origin_post(client):
 def test_home_never_shows_the_invested_amount(client):
     from app.formatting import brl
 
-    total = brl(client.get("/api/portfolio").json()["data"]["total_value"])
+    from app.connectors import demo
+    from app.config import get_settings as real_settings
+
+    total = brl(demo.portfolio(real_settings().tz).total_value)
     briefing = client.get("/api/briefing").json()["data"]["text"]
     reply = client.post("/api/chat", json={"message": "como está a carteira?"}).json()["reply"]
     market = client.get("/api/market").text

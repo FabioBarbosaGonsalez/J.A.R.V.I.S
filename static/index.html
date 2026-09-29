@@ -22,6 +22,8 @@
       <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
       <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 21 19.5H3z"/><path d="M12 10v4.5M12 17v.5"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="1.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v2.5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
       <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5"/></symbol>
     </defs>
   </svg>
@@ -137,6 +139,9 @@
         <div class="panel-head">
           <h2 class="panel-title" id="h-market">Mercado</h2>
           <span class="panel-meta" data-meta></span>
+          <button class="icon-btn" type="button" data-action="private" aria-label="Minha carteira (área protegida)" title="Minha carteira">
+            <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+          </button>
           <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar mercado">
             <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
           </button>
@@ -145,5 +150,22 @@
       </section>
     </div>
   </div>
+
+  <!-- Aba privada: o conteúdo só existe enquanto está aberta e desbloqueada -->
+  <dialog class="private-dialog" id="private-dialog" aria-labelledby="h-private">
+    <div class="panel private-panel">
+      <div class="panel-head">
+        <h2 class="panel-title" id="h-private">Minha carteira</h2>
+        <span class="panel-meta">área protegida</span>
+        <button class="icon-btn" type="button" data-action="private-lock" aria-label="Bloquear" title="Bloquear">
+          <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+        </button>
+        <button class="icon-btn" type="button" data-action="private-close" aria-label="Fechar" title="Fechar">
+          <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="panel-body" data-content></div>
+    </div>
+  </dialog>
 </body>
 </html>
