@@ -188,8 +188,8 @@ def test_market_shows_dollar_and_quotes_without_amounts(cache, portfolio_file):
     assert res.status == "ok" and res.message is None
     assert res.data.usd_brl.bid == USD_BRL
     by_ticker = {q.ticker: q for q in res.data.quotes}
-    assert (by_ticker["PETR4"].price, by_ticker["PETR4"].currency, by_ticker["PETR4"].price_brl) == (36.8, "BRL", None)
-    assert (by_ticker["VOO"].price, by_ticker["VOO"].currency, by_ticker["VOO"].price_brl) == (700.0, "USD", 3500.0)
+    assert (by_ticker["PETR4"].price, by_ticker["PETR4"].currency) == (36.8, "BRL")
+    assert (by_ticker["VOO"].price, by_ticker["VOO"].currency) == (700.0, "USD")  # só em US$, sem conversão
     assert by_ticker["Tesouro Selic 2031"].price is None and "Sem cotação" in by_ticker["Tesouro Selic 2031"].note
     # Nada de quantidade ou valor investido na resposta da home
     body = res.model_dump_json()
@@ -288,7 +288,7 @@ def test_dollar_failure_uses_last_known_rate(cache, portfolio_file):
 def test_no_dollar_at_all_keeps_quotes(cache, portfolio_file):
     res = market(FakeApis(fx_status=503), cache, portfolio_file)
     assert res.status == "ok" and res.data.usd_brl is None
-    assert {q.ticker: q.price_brl for q in res.data.quotes}["VOO"] is None
+    assert {q.ticker: q.price for q in res.data.quotes}["VOO"] == 700.0
     assert "sem conversão" in res.message
 
 

@@ -233,7 +233,7 @@ def market(tz) -> Market:
         for p in portfolio(tz).positions
     ]
     quotes.append(AssetQuote(ticker="VOO", asset_type="ETF Internacional", currency="USD", price=540.12,
-                             price_brl=round(540.12 * usd.bid, 2), change_pct=0.21, quoted_at=now))
+                             change_pct=0.21, quoted_at=now))
     quotes.append(AssetQuote(ticker="Tesouro Selic 2031", asset_type="Tesouro Direto",
                              note="Sem cotação ao vivo gratuita."))
     return Market(usd_brl=usd, quotes=quotes)

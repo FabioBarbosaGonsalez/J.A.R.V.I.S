@@ -214,8 +214,7 @@ class AssetQuote(BaseModel):
     asset_type: AssetType
     name: str | None = None
     currency: Literal["BRL", "USD"] | None = None
-    price: float | None = None  # na moeda do ativo
-    price_brl: float | None = None  # convertido pelo dólar do momento (ativos em US$)
+    price: float | None = None  # na moeda do ativo: R$ na B3, US$ nos EUA
     change_pct: float | None = None
     quoted_at: datetime | None = None
     note: str | None = None  # por que não há cotação, quando não há

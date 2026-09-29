@@ -306,12 +306,9 @@ def load_market(settings: Settings, cache: Cache, http: httpx.Client, portfolio_
             items.append(AssetQuote(ticker=h.ticker, asset_type=h.asset_type, note=note))
             continue
         q = entry.value
-        price_brl = None
-        if q["currency"] == "USD" and c.fx:
-            price_brl = round(q["price"] * c.fx.bid, 2)
         items.append(AssetQuote(
             ticker=h.ticker, asset_type=h.asset_type, name=q.get("name"), currency=q["currency"],
-            price=q["price"], price_brl=price_brl, change_pct=q["change_pct"],
+            price=q["price"], change_pct=q["change_pct"],
             quoted_at=datetime.fromisoformat(q["time"]),
         ))
 

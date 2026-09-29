@@ -159,9 +159,7 @@ function renderMarket(body, market) {
         h('td', { colspan: 2 }, q.note ?? 'Sem cotação.'))
       : h('tr', {},
         h('th', { scope: 'row', title: q.name ?? '' }, q.ticker),
-        h('td', {},
-          q.currency === 'USD' ? usd(q.price) : brl(q.price),
-          q.price_brl != null && h('small', {}, `≈ ${brl(q.price_brl)}`)),
+        h('td', {}, q.currency === 'USD' ? usd(q.price) : brl(q.price)),
         h('td', { class: trendClass(q.change_pct) }, pct(q.change_pct))))),
   ]);
 

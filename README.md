@@ -151,7 +151,7 @@ O painel **Mercado** da home mostra o dólar comercial ao vivo e a cotação do 
 | Dólar comercial | AwesomeAPI (`/json/last/USD-BRL`), sem chave | grátis, atualiza a cada minuto |
 | Tesouro Direto | sem fonte gratuita ao vivo (a brapi só oferece nos planos pagos) | aparece como "sem cotação" |
 
-Ativos em dólar são convertidos para reais pelo dólar do momento.
+Ativos dos EUA aparecem em US$. A conversão para reais pelo dólar do momento só é usada nos cálculos internos da carteira (percentuais do briefing).
 
 **Limites do plano gratuito da brapi** (conferidos em brapi.dev/pricing): 1 ativo por requisição, 15 mil requisições em 30 dias e dados atualizados a cada 30 minutos. O câmbio da brapi só existe nos planos pagos, por isso o dólar vem da AwesomeAPI. Para respeitar os limites, o painel:
 
