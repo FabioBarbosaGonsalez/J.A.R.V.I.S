@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>J.A.R.V.I.S</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 4l14 8v16l-14 8-14-8V12z' fill='none' stroke='%234cd6ff' stroke-width='3'/%3E%3Ccircle cx='20' cy='20' r='6' fill='%234cd6ff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Orbitron:wght@500;700&display=swap">
+  <link rel="stylesheet" href="/static/css/hud.css">
+  <script type="module" src="/static/js/app.js"></script>
+</head>
+<body data-state="idle">
+  <!-- Ícones próprios (sprite SVG), referenciados com <use href="#i-..."> -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-2.5-6.5z"/><path d="M11.5 13.5 20 4"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+      <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 21 19.5H3z"/><path d="M12 10v4.5M12 17v.5"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="hud">
+    <header class="hud-header">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+          <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
+          <path d="M20 6l12 7v14l-12 7-12-7V13z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="20" cy="20" r="4.5" fill="currentColor"/>
+        </svg>
+        <div>
+          <h1 class="brand-name" id="assistant-name">J.A.R.V.I.S</h1>
+          <p class="brand-sub">Assistente pessoal <span class="badge" id="mode-badge" hidden>Modo demo</span></p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="clock" aria-label="Data e hora">
+          <span class="clock-time" id="clock-time">--:--:--</span>
+          <span class="clock-date" id="clock-date"></span>
+        </div>
+        <button class="btn" id="refresh-all" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          <span>Atualizar</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="panel panel-briefing" data-panel="briefing" aria-labelledby="h-briefing">
+      <div class="panel-head">
+        <h2 class="panel-title" id="h-briefing">Briefing do dia</h2>
+        <span class="panel-meta" data-meta></span>
+        <button class="icon-btn" type="button" data-action="speak-briefing" aria-label="Ler o briefing em voz alta">
+          <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
+        </button>
+        <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar briefing">
+          <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+        </button>
+      </div>
+      <div class="panel-body" data-body></div>
+    </section>
+
+    <div class="col col-left">
+      <section class="panel" data-panel="calendar" aria-labelledby="h-calendar">
+        <div class="panel-head">
+          <h2 class="panel-title" id="h-calendar">Agenda</h2>
+          <span class="panel-meta" data-meta></span>
+          <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar agenda">
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+        <div class="panel-body" data-body></div>
+      </section>
+
+      <section class="panel" data-panel="email" aria-labelledby="h-email">
+        <div class="panel-head">
+          <h2 class="panel-title" id="h-email">E-mails</h2>
+          <span class="panel-meta" data-meta></span>
+          <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar e-mails">
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+        <div class="panel-body" data-body></div>
+      </section>
+    </div>
+
+    <main class="core-zone">
+      <div class="core-wrap">
+        <canvas id="core" aria-hidden="true"></canvas>
+      </div>
+      <div class="core-caption">
+        <span class="core-name" id="core-name">J.A.R.V.I.S</span>
+        <span class="core-state" id="core-state" role="status">Em espera</span>
+      </div>
+
+      <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversa"></div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <button class="mic-btn" id="mic-btn" type="button" aria-pressed="false" aria-label="Falar com o assistente">
+          <svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg>
+        </button>
+        <label class="sr-only" for="chat-input">Mensagem</label>
+        <input class="chat-input" id="chat-input" type="text" maxlength="2000" placeholder="Pergunte algo…" enterkeyhint="send">
+        <button class="icon-btn icon-btn-lg" type="submit" aria-label="Enviar">
+          <svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>
+        </button>
+        <button class="icon-btn icon-btn-lg" id="voice-toggle" type="button" aria-pressed="true" aria-label="Respostas faladas: ligadas">
+          <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
+        </button>
+      </form>
+      <p class="hint" id="voice-hint">Segure <kbd>Espaço</kbd> para falar · <kbd>Esc</kbd> interrompe</p>
+    </main>
+
+    <div class="col col-right">
+      <section class="panel" data-panel="canvas" aria-labelledby="h-canvas">
+        <div class="panel-head">
+          <h2 class="panel-title" id="h-canvas">Faculdade</h2>
+          <span class="panel-meta" data-meta></span>
+          <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar entregas da faculdade">
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+        <div class="panel-body" data-body></div>
+      </section>
+
+      <section class="panel" data-panel="portfolio" aria-labelledby="h-portfolio">
+        <div class="panel-head">
+          <h2 class="panel-title" id="h-portfolio">Investimentos</h2>
+          <span class="panel-meta" data-meta></span>
+          <button class="icon-btn" type="button" data-action="refresh" aria-label="Atualizar investimentos">
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          </button>
+        </div>
+        <div class="panel-body" data-body></div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

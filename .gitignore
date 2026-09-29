@@ -1,0 +1,30 @@
+# --- Segredos: nunca versionar ---
+.env
+credentials.json
+token.json
+
+# --- Dados pessoais e cache ---
+# "data/*" (e não "data/") para permitir a exceção abaixo:
+# o Git não consegue reincluir arquivos de uma pasta inteira ignorada.
+data/*
+!data/carteira.example.csv
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Notas locais ---
+PROMPT_JARVIS.md
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Editor / SO ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
