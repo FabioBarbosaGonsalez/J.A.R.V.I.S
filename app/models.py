@@ -61,8 +61,14 @@ class Deliverable(BaseModel):
     title: str
     course: str
     due_at: datetime  # sempre com fuso horário
-    status: Literal["pending", "submitted"]
+    # "unknown": o feed iCal (plano B do Canvas) não informa se foi entregue
+    status: Literal["pending", "submitted", "unknown"]
     url: str | None = None
+
+    @property
+    def open(self) -> bool:
+        """Ainda pode precisar de atenção (não sabemos se foi entregue, ou não foi)."""
+        return self.status != "submitted"
 
     @computed_field
     @property
@@ -74,32 +80,41 @@ class Deliverable(BaseModel):
     @computed_field
     @property
     def urgent(self) -> bool:
-        """Pendente e com prazo nas próximas 48 horas."""
-        return self.status == "pending" and 0 < self.hours_left < 48
+        """Em aberto e com prazo nas próximas 48 horas."""
+        return self.open and 0 < self.hours_left < 48
 
 
 # --- Investimentos --------------------------------------------------------
 
-AssetType = Literal["ação", "FII", "ETF", "BDR"]
+AssetType = Literal["ação", "FII", "ETF", "BDR", "ETF Internacional", "Tesouro Direto"]
 
 
 class Position(BaseModel):
+    """Posição com preço e preço médio na moeda do ativo (R$ ou US$).
+
+    `fx` converte para reais: 1 para ativos da B3, o dólar do momento para os
+    dos EUA. Valores em R$ usam o câmbio atual, então o resultado sobre o preço
+    médio mede o ativo, sem o efeito da variação do dólar desde a compra.
+    """
+
     ticker: str
     asset_type: AssetType
     quantity: float
     avg_price: float
     price: float
     day_change_pct: float
+    currency: Literal["BRL", "USD"] = "BRL"
+    fx: float = 1.0
 
     @computed_field
     @property
     def market_value(self) -> float:
-        return round(self.quantity * self.price, 2)
+        return round(self.quantity * self.price * self.fx, 2)
 
     @computed_field
     @property
     def cost(self) -> float:
-        return round(self.quantity * self.avg_price, 2)
+        return round(self.quantity * self.avg_price * self.fx, 2)
 
     @computed_field
     @property
@@ -179,6 +194,36 @@ class Portfolio(BaseModel):
             for t, v in totals.items()
         ]
         return sorted(items, key=lambda a: a.value, reverse=True)
+
+
+# --- Mercado (painel da home: dólar e cotações, sem valores da carteira) ----
+
+class FxQuote(BaseModel):
+    pair: str  # "USD-BRL"
+    bid: float  # preço de compra do dólar comercial, em R$
+    pct_change: float
+    high: float
+    low: float
+    updated_at: datetime
+
+
+class AssetQuote(BaseModel):
+    """Cotação de um ativo da carteira. Sem quantidade nem valor investido."""
+
+    ticker: str
+    asset_type: AssetType
+    name: str | None = None
+    currency: Literal["BRL", "USD"] | None = None
+    price: float | None = None  # na moeda do ativo
+    price_brl: float | None = None  # convertido pelo dólar do momento (ativos em US$)
+    change_pct: float | None = None
+    quoted_at: datetime | None = None
+    note: str | None = None  # por que não há cotação, quando não há
+
+
+class Market(BaseModel):
+    usd_brl: FxQuote | None = None
+    quotes: list[AssetQuote] = []
 
 
 # --- Briefing e chat ------------------------------------------------------

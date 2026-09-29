@@ -8,12 +8,14 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
+PORTFOLIO_FILE = DATA_DIR / "carteira.csv"
+CACHE_FILE = DATA_DIR / "cache.sqlite3"
 
 # O servidor só aceita conexões da própria máquina. Não é configurável de propósito.
 HOST = "127.0.0.1"
@@ -24,6 +26,8 @@ class Settings(BaseSettings):
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # "CANVAS_TOKEN=" (vazio) conta como não configurado, e não como token ""
+        env_ignore_empty=True,
     )
 
     # Geral
@@ -42,6 +46,9 @@ class Settings(BaseSettings):
 
     # Investimentos (Fase 2)
     brapi_token: SecretStr | None = None
+    # Plano gratuito da brapi: 1 ativo por requisição (Startup: 10; Pro: 20).
+    # A cota restante vem da própria brapi, em cada resposta.
+    brapi_tickers_per_request: int = Field(default=1, ge=1, le=20)
 
     # Google (Fase 3)
     google_credentials_file: str = "credentials.json"
@@ -54,6 +61,11 @@ class Settings(BaseSettings):
     @property
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
+
+
+def secret(value: SecretStr | None) -> str:
+    """Valor de um segredo, ou "" se não estiver configurado. Use só na hora de chamar a API."""
+    return value.get_secret_value().strip() if value else ""
 
 
 @lru_cache

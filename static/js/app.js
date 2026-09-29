@@ -226,10 +226,11 @@ ui.form.addEventListener('submit', (event) => {
 
 // --- Painéis ------------------------------------------------------------------
 
-async function refreshAll() {
+/** `force`: pedido manual, ignora o cache do servidor. A automática usa o cache. */
+async function refreshAll({ force = false } = {}) {
   lastRefresh = Date.now();
   ui.refreshAll.classList.add('is-loading');
-  await loadAll();
+  await loadAll({ force });
   ui.refreshAll.classList.remove('is-loading');
 }
 
@@ -237,7 +238,7 @@ document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const panel = button.closest('[data-panel]')?.dataset.panel;
-  if (button.dataset.action === 'refresh' && panel) loadPanel(panel);
+  if (button.dataset.action === 'refresh' && panel) loadPanel(panel, { force: true });
   if (button.dataset.action === 'speak-briefing') {
     const briefing = panelData('briefing');
     if (!briefing) return;
@@ -253,13 +254,20 @@ document.addEventListener('click', (event) => {
   }
 });
 
-ui.refreshAll.addEventListener('click', refreshAll);
+ui.refreshAll.addEventListener('click', () => refreshAll({ force: true }));
 
 // Atualização automática; pausa com a aba escondida e recupera ao voltar
+const MARKET_REFRESH_MS = 60_000;
+
 function scheduleRefresh() {
   setInterval(() => {
     if (!document.hidden && Date.now() - lastRefresh >= refreshMs) refreshAll();
   }, 15_000);
+  // Dólar "ao vivo": o painel Mercado atualiza a cada minuto. No servidor, só o
+  // dólar é buscado de novo; as cotações seguem o cache de 30 minutos.
+  setInterval(() => {
+    if (!document.hidden) loadPanel('market');
+  }, MARKET_REFRESH_MS);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && Date.now() - lastRefresh >= refreshMs) refreshAll();
   });

@@ -21,6 +21,7 @@ from app.models import (
     ChatResponse,
     Deliverable,
     Email,
+    Market,
     PanelResponse,
     Portfolio,
     StatusResponse,
@@ -113,12 +114,23 @@ def get_calendar(settings: SettingsDep, simulate: Simulate = None):
 
 
 @app.get("/api/canvas", response_model=PanelResponse[list[Deliverable]])
-def get_canvas(settings: SettingsDep, simulate: Simulate = None):
-    return _panel(sources.canvas_panel, settings, simulate)
+def get_canvas(
+    settings: SettingsDep,
+    simulate: Simulate = None,
+    force: Annotated[bool, Query(description="Ignora o cache (no máximo uma vez por minuto).")] = False,
+):
+    return _panel(lambda s: sources.canvas_panel(s, force=force), settings, simulate)
+
+
+@app.get("/api/market", response_model=PanelResponse[Market])
+def get_market(settings: SettingsDep, simulate: Simulate = None):
+    """Painel da home: dólar ao vivo e cotações da carteira, sem valores investidos."""
+    return _panel(sources.market_panel, settings, simulate)
 
 
 @app.get("/api/portfolio", response_model=PanelResponse[Portfolio])
 def get_portfolio(settings: SettingsDep, simulate: Simulate = None):
+    """Carteira em reais (não aparece na home)."""
     return _panel(sources.portfolio_panel, settings, simulate)
 
 

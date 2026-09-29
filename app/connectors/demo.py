@@ -8,10 +8,13 @@ Nomes, e-mails e valores são fictícios.
 from datetime import datetime, time, timedelta
 
 from app.models import (
+    AssetQuote,
     CalendarEvent,
     Deliverable,
     Dividend,
     Email,
+    FxQuote,
+    Market,
     Portfolio,
     Position,
 )
@@ -218,3 +221,19 @@ def portfolio(tz) -> Portfolio:
                  payment_date=today + timedelta(days=20), estimated_total=94.00),
     ]
     return Portfolio(positions=positions, dividends=dividends)
+
+
+def market(tz) -> Market:
+    """Painel da home: dólar e cotações, derivados da carteira de demonstração."""
+    now = _now(tz)
+    usd = FxQuote(pair="USD-BRL", bid=5.2072, pct_change=-0.30, high=5.2411, low=5.1976, updated_at=now)
+    quotes = [
+        AssetQuote(ticker=p.ticker, asset_type=p.asset_type, currency="BRL", price=p.price,
+                   change_pct=p.day_change_pct, quoted_at=now)
+        for p in portfolio(tz).positions
+    ]
+    quotes.append(AssetQuote(ticker="VOO", asset_type="ETF Internacional", currency="USD", price=540.12,
+                             price_brl=round(540.12 * usd.bid, 2), change_pct=0.21, quoted_at=now))
+    quotes.append(AssetQuote(ticker="Tesouro Selic 2031", asset_type="Tesouro Direto",
+                             note="Sem cotação ao vivo gratuita."))
+    return Market(usd_brl=usd, quotes=quotes)

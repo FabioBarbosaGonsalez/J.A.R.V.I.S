@@ -32,11 +32,13 @@ def build_rule_briefing(snap: Snapshot, now: datetime, address: str = "") -> Bri
 
     # Faculdade: o que vence primeiro, cruzado com e-mails e agenda
     if snap.deliverables is not None:
-        pending = [d for d in snap.deliverables if d.status == "pending" and d.hours_left > 0]
+        pending = [d for d in snap.deliverables if d.open and d.hours_left > 0]
         urgent = [d for d in pending if d.urgent]
         if urgent:
             first = urgent[0]
             parts.append(f"Atenção: {first.title}, de {first.course}, vence em {duration(first.hours_left)}.")
+            if first.status == "unknown":
+                parts.append("Confira no Canvas se já foi entregue.")
             highlights.append(Highlight(level="critical", text=f"{first.course}: prazo em {duration(first.hours_left)}"))
 
             course_key = normalize(first.course)
@@ -102,10 +104,13 @@ def build_rule_briefing(snap: Snapshot, now: datetime, address: str = "") -> Bri
         if len(today) >= BUSY_DAY_THRESHOLD:
             highlights.append(Highlight(level="warning", text=f"Dia lotado: {len(today)} compromissos"))
 
-    # Carteira: só descreve, nunca recomenda
+    # Mercado e carteira: dólar e percentuais, nunca o valor investido; só descreve, nunca recomenda
+    if snap.market is not None and snap.market.usd_brl:
+        fx = snap.market.usd_brl
+        parts.append(f"O dólar está a {brl(fx.bid)}, {pct(fx.pct_change)} no dia.")
     if snap.portfolio is not None and snap.portfolio.positions:
         p = snap.portfolio
-        parts.append(f"A carteira soma {brl(p.total_value)}, {pct(p.day_change_pct)} no dia.")
+        parts.append(f"Sua carteira está {pct(p.day_change_pct)} hoje.")
         highlights.append(Highlight(level="info", text=f"Carteira {pct(p.day_change_pct)} hoje"))
 
     unavailable = [

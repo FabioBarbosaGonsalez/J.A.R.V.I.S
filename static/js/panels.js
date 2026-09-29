@@ -4,14 +4,17 @@
 import { getJSON, panelUrl } from './api.js';
 import { h, icon } from './dom.js';
 import {
-  ago, brl, dayDiff, dayLabel, hoursUntil, num, pct, shortDate, signedBrl, time, timeLeft, trendClass,
+  ago, brl, brl4, dayDiff, dayLabel, hoursUntil, pct, shortDate, time, timeLeft, trendClass, usd,
 } from './format.js';
 import { typeText } from './typewriter.js';
 
 const DEADLINE_WINDOW_H = 7 * 24; // barra de prazo: 0% = 7 dias ou mais, 100% = vencendo
 const URGENT_H = 48;
-const TYPE_CLASS = { 'ação': 't-acao', FII: 't-fii', ETF: 't-etf', BDR: 't-bdr' };
-const TYPE_LABEL = { 'ação': 'Ações', FII: 'FIIs', ETF: 'ETFs', BDR: 'BDRs' };
+const TYPE_ORDER = ['ação', 'FII', 'ETF', 'BDR', 'ETF Internacional', 'Tesouro Direto'];
+const TYPE_LABEL = {
+  'ação': 'Ações', FII: 'FIIs', ETF: 'ETFs', BDR: 'BDRs',
+  'ETF Internacional': 'ETFs internacionais', 'Tesouro Direto': 'Tesouro Direto',
+};
 
 const responses = {}; // última resposta de cada painel
 
@@ -105,15 +108,21 @@ function renderCanvas(body, deliverables) {
     const urgent = !done && hours > 0 && hours < URGENT_H;
     const progress = Math.min(1, Math.max(0, 1 - hours / DEADLINE_WINDOW_H));
 
+    // "unknown": veio do feed do calendário, que não diz se foi entregue
     const [chipClass, chipText] = done
       ? ['chip-done', 'Entregue']
-      : overdue ? ['chip-overdue', 'Atrasada'] : ['chip-pending', 'Pendente'];
+      : overdue ? ['chip-overdue', 'Atrasada']
+        : d.status === 'pending' ? ['chip-pending', 'Pendente'] : [null, null];
+
+    const title = d.url?.startsWith('https://')
+      ? h('a', { href: d.url, target: '_blank', rel: 'noopener noreferrer', title: `${d.title} (abrir no Canvas)` }, d.title)
+      : d.title;
 
     const classes = ['item', 'task', urgent && 'is-urgent', done && 'is-done', overdue && 'is-overdue'];
     return h('li', { class: classes.filter(Boolean).join(' ') },
       h('div', { class: 'row' },
-        h('span', { class: 'task-title', title: d.title }, d.title),
-        h('span', { class: `chip ${chipClass}` }, chipText)),
+        h('span', { class: 'task-title', title: d.title }, title),
+        chipText && h('span', { class: `chip ${chipClass}` }, chipText)),
       h('div', { class: 'row sub' },
         h('span', {}, d.course),
         h('span', { class: 'due', title: due.toLocaleString('pt-BR') },
@@ -122,50 +131,48 @@ function renderCanvas(body, deliverables) {
   })));
 }
 
-function renderPortfolio(body, pf) {
-  const positions = [...pf.positions].sort((a, b) => b.market_value - a.market_value);
+// Mercado: dólar ao vivo e cotação de cada ativo da carteira. De propósito, sem
+// quantidade, patrimônio ou resultado: a home não mostra quanto está investido.
+function renderMarket(body, market) {
+  const fx = market.usd_brl;
+  const dollar = fx
+    ? h('div', { class: 'fx' },
+      h('div', {},
+        h('span', { class: 'label' }, 'Dólar comercial'),
+        h('strong', { class: 'big' }, brl4(fx.bid))),
+      h('div', { class: 'fx-side' },
+        h('span', { class: `val ${trendClass(fx.pct_change)}` }, pct(fx.pct_change)),
+        h('small', {}, `mín ${brl4(fx.low)} · máx ${brl4(fx.high)}`),
+        h('small', {}, `atualizado às ${time(new Date(fx.updated_at))}`)))
+    : h('p', { class: 'empty' }, 'Cotação do dólar indisponível no momento.');
 
-  const stat = (label, value, pctValue) =>
+  // Agrupa por tipo, na ordem de TYPE_ORDER
+  const groups = TYPE_ORDER
+    .map((type) => [type, market.quotes.filter((q) => q.asset_type === type)])
+    .filter(([, items]) => items.length);
+
+  const rows = groups.flatMap(([type, items]) => [
+    h('tr', { class: 'group' }, h('th', { colspan: 3, scope: 'colgroup' }, TYPE_LABEL[type])),
+    ...items.map((q) => (q.price == null
+      ? h('tr', { class: 'no-quote' },
+        h('th', { scope: 'row' }, q.ticker),
+        h('td', { colspan: 2 }, q.note ?? 'Sem cotação.'))
+      : h('tr', {},
+        h('th', { scope: 'row', title: q.name ?? '' }, q.ticker),
+        h('td', {},
+          q.currency === 'USD' ? usd(q.price) : brl(q.price),
+          q.price_brl != null && h('small', {}, `≈ ${brl(q.price_brl)}`)),
+        h('td', { class: trendClass(q.change_pct) }, pct(q.change_pct))))),
+  ]);
+
+  body.replaceChildren(h('div', { class: 'market' },
+    dollar,
     h('div', {},
-      h('span', { class: 'label' }, label),
-      h('span', { class: `val ${trendClass(value)}` }, signedBrl(value), h('small', {}, pct(pctValue))));
-
-  const allocation = h('div', {},
-    h('div', { class: 'alloc-bar', role: 'img', 'aria-label': pf.allocation.map((a) => `${TYPE_LABEL[a.asset_type]} ${num(a.pct)}%`).join(', ') },
-      pf.allocation.map((a) => h('span', { class: TYPE_CLASS[a.asset_type], style: `width: ${a.pct}%`, title: `${TYPE_LABEL[a.asset_type]}: ${brl(a.value)}` }))),
-    h('ul', { class: 'alloc-legend' },
-      pf.allocation.map((a) => h('li', {}, h('i', { class: TYPE_CLASS[a.asset_type] }), TYPE_LABEL[a.asset_type], h('b', {}, `${num(a.pct)}%`)))));
-
-  const dividends = pf.dividends.length
-    ? h('div', {},
-      h('h3', { class: 'sub-title' }, 'Próximos proventos'),
-      h('ul', { class: 'list compact' }, pf.dividends.map((d) =>
-        h('li', { class: 'item' },
-          h('span', { class: 'ticker' }, d.ticker),
-          h('span', { class: 'muted' }, `${d.kind} · ${shortDate(new Date(`${d.payment_date}T12:00:00`))}`),
-          h('span', { class: 'amount' }, `≈ ${brl(d.estimated_total)}`)))))
-    : null;
-
-  const table = h('div', {},
-    h('h3', { class: 'sub-title' }, 'Posições'),
-    h('table', { class: 'positions' },
-      h('thead', {}, h('tr', {}, ['Ativo', 'Qtd', 'Preço', 'Dia', 'Resultado'].map((c) => h('th', { scope: 'col' }, c)))),
-      h('tbody', {}, positions.map((p) => h('tr', {},
-        h('td', {}, p.ticker),
-        h('td', {}, num(p.quantity)),
-        h('td', {}, brl(p.price)),
-        h('td', { class: trendClass(p.day_change_pct) }, pct(p.day_change_pct)),
-        h('td', { class: trendClass(p.result_pct) }, pct(p.result_pct)))))));
-
-  body.replaceChildren(h('div', { class: 'pf' },
-    h('div', {}, h('span', { class: 'label' }, 'Patrimônio'), h('strong', { class: 'big' }, brl(pf.total_value))),
-    h('div', { class: 'pf-stats' },
-      stat('Hoje', pf.day_change_value, pf.day_change_pct),
-      stat('Sobre o preço médio', pf.result_value, pf.result_pct)),
-    allocation,
-    dividends,
-    table,
-    h('p', { class: 'disclaimer' }, 'Apenas uma descrição da carteira. Não é recomendação de investimento.')));
+      h('h3', { class: 'sub-title' }, 'Cotações da carteira'),
+      h('table', { class: 'quotes' },
+        h('thead', {}, h('tr', {}, ['Ativo', 'Preço', 'Dia'].map((c) => h('th', { scope: 'col' }, c)))),
+        h('tbody', {}, rows))),
+    h('p', { class: 'disclaimer' }, 'Cotações com até 30 minutos de atraso (plano gratuito da brapi). Não é recomendação de investimento.')));
 }
 
 // --- Configuração dos painéis --------------------------------------------
@@ -192,12 +199,12 @@ export const PANELS = {
   canvas: {
     path: '/api/canvas',
     render: renderCanvas,
-    summary: (items) => `${items.filter((d) => d.status === 'pending').length} pendentes`,
+    summary: (items) => `${items.filter((d) => d.status !== 'submitted').length} em aberto`,
   },
-  portfolio: {
-    path: '/api/portfolio',
-    render: renderPortfolio,
-    summary: (pf) => `${pf.positions.length} ativos`,
+  market: {
+    path: '/api/market',
+    render: renderMarket,
+    summary: (m) => `${m.quotes.filter((q) => q.price != null).length} de ${m.quotes.length} cotados`,
   },
 };
 
@@ -205,7 +212,7 @@ export const PANELS = {
 const TIME_SENSITIVE = ['calendar', 'email', 'canvas'];
 
 // Fontes de dados mostradas no diagnóstico do cabeçalho (o briefing deriva delas)
-const SYSTEMS = { calendar: 'Agenda', email: 'E-mails', canvas: 'Faculdade', portfolio: 'Carteira' };
+const SYSTEMS = { calendar: 'Agenda', email: 'E-mails', canvas: 'Faculdade', market: 'Mercado' };
 const STATUS_LABEL = { ok: 'online', not_configured: 'não configurado', error: 'erro' };
 
 // --- Diagnóstico dos sistemas -----------------------------------------------
@@ -259,8 +266,11 @@ function paint(name) {
   if (res.status === 'ok') {
     const scroll = body.scrollTop; // redesenhar não pode jogar a rolagem para o topo
     cfg.render(body, res.data);
+    body.querySelector(':scope > .panel-note')?.remove();
+    if (res.message) body.prepend(h('p', { class: 'panel-note' }, icon('alert'), res.message));
     body.scrollTop = scroll;
-    const parts = [cfg.summary?.(res.data), `às ${time(new Date(res.updated_at))}`];
+    const when = `${res.source === 'cache' ? 'dados de' : 'às'} ${time(new Date(res.updated_at))}`;
+    const parts = [cfg.summary?.(res.data), when];
     meta.textContent = parts.filter(Boolean).join(' · ');
     return;
   }
@@ -268,13 +278,13 @@ function paint(name) {
   if (res.status === 'not_configured') {
     body.replaceChildren(stateBlock('off', 'Não configurado', res.message));
   } else {
-    body.replaceChildren(stateBlock('error', 'Erro', res.message, () => loadPanel(name)));
+    body.replaceChildren(stateBlock('error', 'Erro', res.message, () => loadPanel(name, { force: true })));
   }
 }
 
 // --- API pública -------------------------------------------------------------
 
-export async function loadPanel(name) {
+export async function loadPanel(name, { force = false } = {}) {
   const { section, body } = elements(name);
   if (section.classList.contains('is-loading')) return;
   section.classList.add('is-loading');
@@ -282,7 +292,7 @@ export async function loadPanel(name) {
   if (responses[name]?.status !== 'ok') body.replaceChildren(skeleton(name === 'briefing' ? 2 : 4));
 
   try {
-    responses[name] = await getJSON(panelUrl(name, PANELS[name].path));
+    responses[name] = await getJSON(panelUrl(name, PANELS[name].path, { force }));
   } catch (err) {
     responses[name] = { status: 'error', message: err.message };
   }
@@ -292,7 +302,12 @@ export async function loadPanel(name) {
   section.removeAttribute('aria-busy');
 }
 
-export const loadAll = () => Promise.all(Object.keys(PANELS).map(loadPanel));
+/** Carrega as fontes em paralelo e o briefing por último, para ele já usar os dados novos. */
+export async function loadAll({ force = false } = {}) {
+  const sources = Object.keys(PANELS).filter((name) => name !== 'briefing');
+  await Promise.all(sources.map((name) => loadPanel(name, { force })));
+  await loadPanel('briefing');
+}
 
 export function repaintTimeSensitive() {
   for (const name of TIME_SENSITIVE) {

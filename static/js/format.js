@@ -4,7 +4,14 @@ const brlFormat = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 
 const numFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const HOUR = 3_600_000;
 
+const brl4Format = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4 });
+const usdFormat = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' });
+
 export const brl = (v) => brlFormat.format(v);
+/** Câmbio com 4 casas, como nas mesas de câmbio: "R$ 5,2044" */
+export const brl4 = (v) => brl4Format.format(v);
+/** "US$ 702,46" */
+export const usd = (v) => usdFormat.format(v);
 export const num = (v) => numFormat.format(v);
 
 export function signedBrl(v) {

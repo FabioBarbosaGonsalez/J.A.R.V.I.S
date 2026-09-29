@@ -19,7 +19,8 @@ TOPICS = {
     "advice": ("devo comprar", "devo vender", "vale a pena comprar", "recomenda"),
     "deliverables": ("entrega", "prazo", "faculdade", "canvas", "tarefa", "trabalho", "prova"),
     "emails": ("email", "mensage", "caixa de entrada"),
-    "portfolio": ("carteira", "investimento", "acoes", "fii", "dividendo", "provento"),
+    "portfolio": ("carteira", "investimento", "acoes", "fii", "dividendo", "provento",
+                  "dolar", "cambio", "cotac", "mercado", "bolsa"),
     "calendar": ("agenda", "compromisso", "evento", "reuniao", "amanha", "hoje"),
     "greeting": ("ola", "oi", "bom dia", "boa tarde", "boa noite"),
 }
@@ -46,6 +47,23 @@ def _event_when(ev: CalendarEvent, now: datetime) -> str:
     return ev.start.strftime("%d/%m às %H:%M")
 
 
+def _market_reply(snap: Snapshot) -> str:
+    """Dólar, variação da carteira e destaques do dia. Nunca o valor investido."""
+    parts = []
+    market = snap.market
+    if market and market.usd_brl:
+        parts.append(f"O dólar está a {brl(market.usd_brl.bid)}, {pct(market.usd_brl.pct_change)} no dia.")
+    if snap.portfolio and snap.portfolio.positions:
+        p = snap.portfolio
+        parts.append(f"Sua carteira está {pct(p.day_change_pct)} hoje e {pct(p.result_pct)} sobre o preço médio.")
+    quoted = [q for q in (market.quotes if market else []) if q.change_pct is not None]
+    if len(quoted) >= 2:
+        best = max(quoted, key=lambda q: q.change_pct)
+        worst = min(quoted, key=lambda q: q.change_pct)
+        parts.append(f"Maior alta: {best.ticker}, {pct(best.change_pct)}. Maior queda: {worst.ticker}, {pct(worst.change_pct)}.")
+    return " ".join(parts) or "Ainda não tenho cotações da sua carteira."
+
+
 def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str, address: str = "") -> str:
     """`address` é como o assistente chama você (USER_NAME): um nome ou "senhor"."""
     topic = _topic(message)
@@ -58,7 +76,7 @@ def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str,
         )
 
     if topic == "deliverables" and snap.deliverables is not None:
-        pending = [d for d in snap.deliverables if d.status == "pending" and d.hours_left > 0][:3]
+        pending = [d for d in snap.deliverables if d.open and d.hours_left > 0][:3]
         if not pending:
             return "Você não tem entregas pendentes."
         items = "; ".join(f"{d.title}, de {d.course}, em {duration(d.hours_left)}" for d in pending)
@@ -78,12 +96,8 @@ def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str,
         items = "; ".join(f"{ev.title}, {_event_when(ev, now)}" for ev in upcoming)
         return f"Seus próximos compromissos: {items}."
 
-    if topic == "portfolio" and snap.portfolio is not None:
-        p = snap.portfolio
-        return (
-            f"A carteira soma {brl(p.total_value)}, com variação de {pct(p.day_change_pct)} hoje "
-            f"e resultado de {pct(p.result_pct)} sobre o preço médio."
-        )
+    if topic == "portfolio" and (snap.portfolio is not None or snap.market is not None):
+        return _market_reply(snap)
 
     if topic == "greeting":
         return (

@@ -4,7 +4,7 @@ from tests.conftest import make_settings
 from app.config import get_settings
 from app.main import app
 
-PANEL_ROUTES = ["/api/emails", "/api/calendar", "/api/canvas", "/api/portfolio", "/api/briefing"]
+PANEL_ROUTES = ["/api/emails", "/api/calendar", "/api/canvas", "/api/portfolio", "/api/market", "/api/briefing"]
 
 
 def test_index_is_served(client):
@@ -42,10 +42,31 @@ def test_simulated_states(client, route, state):
     assert body["message"]
 
 
-def test_panels_not_configured_outside_demo_mode(client):
+@pytest.mark.parametrize("route, hint", [
+    ("/api/canvas", "CANVAS_TOKEN"),
+    ("/api/portfolio", "carteira.csv"),
+    ("/api/market", "carteira.csv"),
+    ("/api/emails", "Fase 3"),
+    ("/api/calendar", "Fase 3"),
+])
+def test_live_mode_without_credentials_says_what_to_configure(client, route, hint, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.sources.PORTFOLIO_FILE", tmp_path / "nao-existe.csv")
     app.dependency_overrides[get_settings] = lambda: make_settings(demo_mode=False)
-    body = client.get("/api/canvas").json()
+    body = client.get(route).json()
     assert body["status"] == "not_configured"
+    assert hint in body["message"]
+
+
+def test_live_briefing_works_without_any_source(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.sources.PORTFOLIO_FILE", tmp_path / "nao-existe.csv")
+    app.dependency_overrides[get_settings] = lambda: make_settings(demo_mode=False)
+    body = client.get("/api/briefing").json()
+    assert body["status"] == "ok"
+    assert "Sem dados de: e-mails, agenda, faculdade, carteira." in body["data"]["text"]
+
+
+def test_canvas_route_accepts_force(client):
+    assert client.get("/api/canvas", params={"force": "true"}).status_code == 200
 
 
 def test_canvas_sorted_and_urgent_flag(client):
@@ -94,3 +115,23 @@ def test_rejects_cross_origin_post(client):
 def test_allows_same_origin_post(client):
     res = client.post("/api/chat", json={"message": "oi"}, headers={"origin": "http://127.0.0.1:8000"})
     assert res.status_code == 200
+
+
+def test_home_never_shows_the_invested_amount(client):
+    from app.formatting import brl
+
+    total = brl(client.get("/api/portfolio").json()["data"]["total_value"])
+    briefing = client.get("/api/briefing").json()["data"]["text"]
+    reply = client.post("/api/chat", json={"message": "como está a carteira?"}).json()["reply"]
+    market = client.get("/api/market").text
+
+    for text in (briefing, reply, market):
+        assert total not in text
+    assert "O dólar está a" in briefing and "Sua carteira está" in briefing
+    assert "Maior alta" in reply
+    assert "quantity" not in market and "market_value" not in market
+
+
+def test_chat_understands_dollar_questions(client):
+    reply = client.post("/api/chat", json={"message": "quanto está o dólar?"}).json()["reply"]
+    assert reply.startswith("O dólar está a R$ 5,21")

@@ -25,9 +25,14 @@ function parseSimulation(search) {
   return result;
 }
 
-export function panelUrl(name, path) {
+/** URL do painel. `force` pede dados novos, ignorando o cache do servidor. */
+export function panelUrl(name, path, { force = false } = {}) {
+  const params = new URLSearchParams();
   const state = simulation[name] ?? simulation.todos;
-  return state ? `${path}?simulate=${state}` : path;
+  if (state) params.set('simulate', state);
+  if (force) params.set('force', 'true');
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 async function request(path, options = {}) {
