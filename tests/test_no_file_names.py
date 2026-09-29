@@ -38,8 +38,10 @@ def test_api_messages_have_no_file_names(client, monkeypatch, tmp_path):
 
 def test_terminal_hints_do_name_the_files(monkeypatch, tmp_path):
     monkeypatch.setattr("app.__main__.PORTFOLIO_FILE", tmp_path / "nao-existe.csv")
-    hints = " ".join(setup_hints(make_settings(demo_mode=False, portfolio_access_key="curta")))
-    for expected in ("CANVAS_TOKEN", "BRAPI_TOKEN", "data/carteira.csv", "PORTFOLIO_ACCESS_KEY", "10 caracteres"):
+    hints = " ".join(setup_hints(make_settings(
+        demo_mode=False, portfolio_access_key="curta", google_credentials_file=str(tmp_path / "credentials.json"))))
+    for expected in ("CANVAS_TOKEN", "BRAPI_TOKEN", "data/carteira.csv", "PORTFOLIO_ACCESS_KEY", "10 caracteres",
+                     "credentials.json"):
         assert expected in hints
 
 
@@ -47,5 +49,16 @@ def test_terminal_hints_quiet_when_configured(monkeypatch, tmp_path):
     csv = tmp_path / "carteira.csv"
     csv.write_text("ticker,tipo,quantidade,preco_medio\n", encoding="utf-8")
     monkeypatch.setattr("app.__main__.PORTFOLIO_FILE", csv)
-    settings = make_settings(demo_mode=False, canvas_token="t", brapi_token="b", portfolio_access_key="1234567890")
+    (tmp_path / "credentials.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "token.json").write_text("{}", encoding="utf-8")
+    settings = make_settings(
+        demo_mode=False, canvas_token="t", brapi_token="b", portfolio_access_key="1234567890",
+        google_credentials_file=str(tmp_path / "credentials.json"), google_token_file=str(tmp_path / "token.json"))
     assert setup_hints(settings) == []
+
+
+def test_terminal_hint_to_connect_google(monkeypatch, tmp_path):
+    (tmp_path / "credentials.json").write_text("{}", encoding="utf-8")
+    settings = make_settings(demo_mode=False, google_credentials_file=str(tmp_path / "credentials.json"),
+                             google_token_file=str(tmp_path / "token.json"))
+    assert any("Conectar Google" in h for h in setup_hints(settings))

@@ -2,7 +2,7 @@
 
 Com DEMO_MODE=true, tudo vem de `connectors.demo`. Sem ele, cada função chama o
 conector real e devolve o mesmo `PanelResponse`, então as rotas e o front-end
-não mudam. Gmail e Agenda chegam na Fase 3.
+não mudam.
 
 A carteira e o mercado compartilham o cache: chamar os dois não duplica
 requisições à brapi.
@@ -16,7 +16,8 @@ import httpx
 
 from app.cache import Cache
 from app.config import CACHE_FILE, PORTFOLIO_FILE, Settings
-from app.connectors import canvas, demo, investments
+from app.connectors import canvas, demo, gcalendar, gmail, investments
+from app.connectors.google_auth import GoogleAuth
 from app.connectors.http import read_only_client
 from app.models import CalendarEvent, Deliverable, Email, Market, PanelResponse, Portfolio
 
@@ -31,6 +32,17 @@ def get_http() -> httpx.Client:
     return read_only_client()
 
 
+_google_auth: dict[tuple, GoogleAuth] = {}
+
+
+def get_google_auth(settings: Settings) -> GoogleAuth:
+    """Uma conexão por par de arquivos: guarda o estado do login em andamento."""
+    key = (settings.google_credentials_path, settings.google_token_path)
+    if key not in _google_auth:
+        _google_auth[key] = GoogleAuth(*key)
+    return _google_auth[key]
+
+
 def _ok(data, settings: Settings) -> PanelResponse:
     return PanelResponse(status="ok", source="demo", updated_at=datetime.now(settings.tz), data=data)
 
@@ -39,16 +51,16 @@ def _not_configured(message: str, settings: Settings) -> PanelResponse:
     return PanelResponse(status="not_configured", updated_at=datetime.now(settings.tz), message=message)
 
 
-def emails_panel(settings: Settings) -> PanelResponse[list[Email]]:
+def emails_panel(settings: Settings, force: bool = False) -> PanelResponse[list[Email]]:
     if settings.demo_mode:
         return _ok(demo.emails(settings.tz), settings)
-    return _not_configured("A integração com o Gmail chega na Fase 3.", settings)
+    return gmail.load(settings, get_cache(), get_http(), get_google_auth(settings), force=force)
 
 
-def calendar_panel(settings: Settings) -> PanelResponse[list[CalendarEvent]]:
+def calendar_panel(settings: Settings, force: bool = False) -> PanelResponse[list[CalendarEvent]]:
     if settings.demo_mode:
         return _ok(demo.calendar_events(settings.tz), settings)
-    return _not_configured("A integração com o Google Calendar chega na Fase 3.", settings)
+    return gcalendar.load(settings, get_cache(), get_http(), get_google_auth(settings), force=force)
 
 
 def canvas_panel(settings: Settings, force: bool = False) -> PanelResponse[list[Deliverable]]:

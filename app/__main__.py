@@ -25,6 +25,11 @@ def setup_hints(settings: Settings) -> list[str]:
         hints.append("Mercado: defina BRAPI_TOKEN no .env (token gratuito em brapi.dev).")
     if not PORTFOLIO_FILE.exists():
         hints.append("Mercado: crie data/carteira.csv a partir de data/carteira.example.csv.")
+    if not settings.google_credentials_path.exists():
+        hints.append(f"E-mails e Agenda: baixe a credencial OAuth (Desktop app) do Google Cloud e salve como "
+                     f"{settings.google_credentials_file} na pasta do projeto (passo a passo no README).")
+    elif not settings.google_token_path.exists():
+        hints.append('E-mails e Agenda: clique em "Conectar Google" no painel para autorizar o acesso.')
     if key_problem(secret(settings.portfolio_access_key)):
         hints.append(f"Minha carteira: defina PORTFOLIO_ACCESS_KEY no .env, com {MIN_KEY_LENGTH} caracteres ou mais.")
     return hints

@@ -3,6 +3,9 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 pydantic-settings>=2.4
 httpx>=0.27
+# Login no Google (OAuth "Desktop app") e renovação do token
+google-auth>=2.30
+google-auth-oauthlib>=1.2
 # Leitura do feed de calendário do Canvas (plano B)
 icalendar>=6
 # Banco de fusos horários (o Windows não traz o IANA tz database)

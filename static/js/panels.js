@@ -3,6 +3,7 @@
 
 import { getJSON, panelUrl } from './api.js';
 import { h, icon } from './dom.js';
+import { connectGoogle } from './google.js';
 import {
   ago, brl, brl4, dayDiff, dayLabel, hoursUntil, pct, shortDate, time, timeLeft, trendClass, usd,
 } from './format.js';
@@ -242,11 +243,29 @@ function skeleton(lines = 4) {
   return h('div', { class: 'skeleton', 'aria-hidden': 'true' }, Array.from({ length: lines }, () => h('span')));
 }
 
-function stateBlock(kind, title, message, onRetry) {
+// Botões que o servidor pode oferecer num painel sem dados (PanelResponse.action)
+const ACTIONS = {
+  google_connect: { label: 'Conectar Google', icon: 'plug' },
+  google_reconnect: { label: 'Reconectar Google', icon: 'refresh' },
+};
+
+// Gmail e Agenda dependem da mesma conexão: redesenha os dois, e o briefing
+function refreshGooglePanels() {
+  loadPanel('email', { force: true });
+  loadPanel('calendar', { force: true });
+  loadPanel('briefing');
+}
+
+function stateBlock(kind, title, message, onRetry, action) {
+  const actionButton = ACTIONS[action] && h('button', {
+    class: 'btn', type: 'button', onclick: () => connectGoogle(refreshGooglePanels),
+  }, icon(ACTIONS[action].icon), ACTIONS[action].label);
+
   return h('div', { class: `state state-${kind}` },
     icon(kind === 'error' ? 'alert' : 'plug'),
     h('p', { class: 'state-title' }, title),
     message && h('p', { class: 'state-msg' }, message),
+    actionButton,
     onRetry && h('button', { class: 'btn', type: 'button', onclick: onRetry }, icon('refresh'), 'Tentar de novo'));
 }
 
@@ -274,7 +293,8 @@ function paint(name) {
   }
   meta.textContent = '';
   if (res.status === 'not_configured') {
-    body.replaceChildren(stateBlock('off', 'Não configurado', res.message));
+    const title = { google_reconnect: 'Conexão expirada', google_waiting: 'Conectando' }[res.action] ?? 'Não configurado';
+    body.replaceChildren(stateBlock('off', title, res.message, null, res.action));
   } else {
     body.replaceChildren(stateBlock('error', 'Erro', res.message, () => loadPanel(name, { force: true })));
   }

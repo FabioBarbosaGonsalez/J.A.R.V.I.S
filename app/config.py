@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     # Google (Fase 3)
     google_credentials_file: str = "credentials.json"
     google_token_file: str = "token.json"
+    gmail_max_messages: int = Field(default=15, ge=1, le=50)
+    # Remetentes destes domínios (e subdomínios) contam como "da faculdade"
+    university_email_domains: str = "puc-campinas.edu.br,instructure.com"
+    # Agendas lidas, separadas por vírgula ("primary" é a sua agenda principal)
+    google_calendar_ids: str = "primary"
+
+    @property
+    def google_credentials_path(self) -> Path:
+        return BASE_DIR / self.google_credentials_file
+
+    @property
+    def google_token_path(self) -> Path:
+        return BASE_DIR / self.google_token_file
 
     # IA (Fase 4)
     gemini_api_key: SecretStr | None = None

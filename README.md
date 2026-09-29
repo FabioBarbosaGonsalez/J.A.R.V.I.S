@@ -4,7 +4,7 @@ Assistente pessoal que roda **localmente no Windows** e reúne num painel único
 
 > Projeto pessoal de fã, sem afiliação com Marvel ou Disney. O visual é inspirado na ideia de um assistente em HUD, mas tudo foi criado do zero em CSS, SVG e canvas: nenhum logo, imagem, som ou voz de filme é usado.
 
-> **Status: Fase 2 de 6.** A interface completa funciona com dados de demonstração, e os painéis **Faculdade** (Canvas) e **Mercado** (brapi e AwesomeAPI) já usam dados reais. Gmail e Agenda chegam na Fase 3.
+> **Status: Fase 3 de 6.** Todos os painéis usam dados reais: **Agenda** e **E-mails** (Google), **Faculdade** (Canvas) e **Mercado** (brapi e AwesomeAPI). O cérebro de IA chega na Fase 4.
 
 <!-- Espaço reservado: adicione aqui um print ou GIF do painel -->
 <!-- ![Painel HUD](docs/painel.png) -->
@@ -15,7 +15,7 @@ Assistente pessoal que roda **localmente no Windows** e reúne num painel único
 |------|----------|----------|
 | 1 | Esqueleto, interface HUD com dados de demonstração, núcleo animado e voz | ✅ pronta |
 | 2 | Canvas (API + feed iCal como plano B), mercado (dólar ao vivo + cotações da carteira) e cache | ✅ pronta |
-| 3 | Gmail e Google Calendar (OAuth, somente leitura) | ⏳ |
+| 3 | Gmail e Google Calendar (OAuth, somente leitura) | ✅ pronta |
 | 4 | Cérebro: IA com ferramentas, briefing do dia e chat | ⏳ |
 | 5 | Acabamento: erros, testes, README final e `iniciar.ps1` | ⏳ |
 | 6 | Extras: animação de abertura na borda da tela e seletor de voz (Piper TTS opcional) | ⏳ |
@@ -101,7 +101,13 @@ python -m pytest
 | `BRAPI_TOKEN` | Token gratuito da brapi | vazio |
 | `BRAPI_TICKERS_PER_REQUEST` | Ativos por requisição (gratuito: 1; Startup: 10; Pro: 20) | `1` |
 
-As variáveis do Google e do Gemini serão usadas nas Fases 3 e 4.
+| `GOOGLE_CREDENTIALS_FILE` | Credencial OAuth "Desktop app" do Google Cloud | `credentials.json` |
+| `GOOGLE_TOKEN_FILE` | Acesso salvo ao conectar o Google (criado sozinho) | `token.json` |
+| `GMAIL_MAX_MESSAGES` | Quantos e-mails recentes mostrar | `15` |
+| `UNIVERSITY_EMAIL_DOMAINS` | Domínios que contam como "da faculdade" | `puc-campinas.edu.br,instructure.com` |
+| `GOOGLE_CALENDAR_IDS` | Agendas lidas, separadas por vírgula | `primary` |
+
+As variáveis do Gemini serão usadas na Fase 4.
 
 ## Conectando suas fontes
 
@@ -128,6 +134,39 @@ Configure o token, o feed ou os dois. Com os dois, o painel usa o token e cai pa
 3. Cole em `CANVAS_ICS_URL=` no `.env`. O link contém um código secreto; trate-o como um token.
 
 O feed traz os prazos, mas não diz se a tarefa já foi entregue. Por isso, com ele, as entregas aparecem sem o selo "Pendente"/"Entregue".
+
+### Google (Gmail e Agenda)
+
+O painel só **lê**: as permissões pedidas são `gmail.readonly` e `calendar.readonly`. Do Gmail vêm só remetente, assunto e o trecho inicial que o próprio Gmail gera; o corpo dos e-mails nunca é baixado. Da Agenda vêm os eventos de hoje e dos próximos 7 dias.
+
+**1. Criar o projeto e ativar as APIs** (uma vez só, gratuito):
+
+1. Entre em https://console.cloud.google.com com a sua conta Google e crie um projeto (ex.: "Jarvis").
+2. Em **APIs e serviços → Biblioteca**, procure e **ative** a **Gmail API** e a **Google Calendar API**.
+
+**2. Configurar a tela de consentimento** (menu **Google Auth Platform**):
+
+1. Em **Branding**, clique em **Começar** (Get started): dê um nome ao app e escolha o seu e-mail como e-mail de suporte.
+2. Em **Público-alvo** (Audience), escolha **Externo**. A opção "Interno" só existe para contas Google Workspace de empresas.
+3. Ainda em **Público-alvo**, deixe o app em **Teste** e, em **Usuários de teste**, adicione o **seu próprio e-mail**.
+4. Informe o e-mail de contato, aceite a política de dados do Google e conclua.
+
+**3. Criar a credencial**:
+
+1. Em **Google Auth Platform → Clientes**, clique em **Criar cliente**.
+2. Tipo de aplicativo: **App para computador** (Desktop app). Dê um nome e crie.
+3. Clique em **Baixar JSON** e salve o arquivo na pasta do projeto com o nome **`credentials.json`**. Ele fica fora do Git.
+
+**4. Conectar**:
+
+1. Com `DEMO_MODE=false`, reinicie o servidor e abra o painel.
+2. Nos painéis Agenda ou E-mails, clique em **Conectar Google**. O Google abre no navegador.
+3. Escolha a sua conta. Como o app é seu e está em teste, o Google avisa que ele **não foi verificado**: clique em **Avançado → Acessar (nome do app)**. Isso é esperado para apps pessoais.
+4. Autorize a leitura do Gmail e da Agenda. Quando aparecer "Conectado ao Google", pode fechar a aba: os painéis se atualizam sozinhos.
+
+**Reconexão a cada 7 dias:** com o app em modo **Teste**, o Google invalida a autorização depois de 7 dias. Quando isso acontece, os painéis mostram **Reconectar Google**; basta clicar e autorizar de novo. O resto do painel continua funcionando.
+
+O acesso fica salvo em `token.json`, na pasta do projeto e fora do Git. Para revogar a qualquer momento, apague esse arquivo ou remova o app em https://myaccount.google.com/permissions.
 
 ### Mercado (dólar e cotações da carteira)
 
@@ -197,7 +236,7 @@ jarvis/
 │   ├── sources.py         # ponto único de onde cada painel tira seus dados
 │   ├── cache.py           # cache SQLite com validade (TTL) e reserva de dados antigos
 │   ├── formatting.py      # formatação em português (R$, %, durações)
-│   ├── connectors/        # canvas, brapi (cotações), fx (dólar), investments, http (só leitura), demo
+│   ├── connectors/        # canvas, gmail, gcalendar, google_auth, brapi, fx, investments, http (só leitura), demo
 │   └── llm/               # briefing.py (regras, depois IA) e chat.py
 ├── static/                # index.html, css/hud.css, js/ (módulos ES, sem framework)
 ├── data/                  # carteira.example.csv (a sua carteira.csv fica fora do Git)
@@ -212,7 +251,8 @@ jarvis/
 - A interface nunca cita nomes de arquivos (`.env`, `carteira.csv`...) nem de variáveis de configuração. Quando falta algo, o painel mostra uma mensagem genérica, e o terminal onde você rodou `python -m app` diz exatamente o que configurar e onde.
 - Todo texto vindo das fontes é inserido na página como texto puro, nunca como HTML. Um e-mail com código malicioso no assunto não é executado.
 - Chaves e tokens ficam só no `.env`, que o `.gitignore` exclui, assim como `credentials.json`, `token.json`, a pasta `data/` e bancos SQLite.
-- As integrações só leem dados: o cliente HTTP dos conectores recusa qualquer método diferente de GET antes de a requisição sair do computador.
+- As integrações só leem dados: o cliente HTTP dos conectores recusa qualquer método diferente de GET antes de a requisição sair do computador. No Google, além disso, as permissões pedidas são só de leitura (`gmail.readonly` e `calendar.readonly`).
+- O login do Google acontece no seu navegador, direto com o Google; o painel nunca vê a sua senha. O acesso salvo (`token.json`) fica fora do Git e pode ser revogado apagando o arquivo.
 - Tokens vão no header `Authorization`, nunca na URL, e as mensagens de erro do painel são escritas sem URLs (o link do feed iCal contém um segredo).
 - O cache (`data/cache.sqlite3`) guarda só o que aparece nos painéis e fica fora do Git.
 - **Voz:** no Chrome e no Edge, o reconhecimento de fala envia o áudio ao serviço online do próprio navegador (Google ou Microsoft). A síntese de fala usa as vozes do Windows ou do navegador.

@@ -45,8 +45,8 @@ def test_simulated_states(client, route, state):
 @pytest.mark.parametrize("route, hint", [
     ("/api/canvas", "falta o token de acesso ou o link do feed"),
     ("/api/market", "Carteira não encontrada"),
-    ("/api/emails", "Fase 3"),
-    ("/api/calendar", "Fase 3"),
+    ("/api/emails", "Google não configurado"),
+    ("/api/calendar", "Google não configurado"),
 ])
 def test_live_mode_without_credentials_says_what_to_configure(client, route, hint, monkeypatch, tmp_path):
     monkeypatch.setattr("app.sources.PORTFOLIO_FILE", tmp_path / "nao-existe.csv")

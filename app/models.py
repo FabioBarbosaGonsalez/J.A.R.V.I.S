@@ -28,6 +28,8 @@ class PanelResponse(BaseModel, Generic[T]):
     updated_at: datetime
     message: str | None = None
     data: T | None = None
+    # Botão que o painel oferece para resolver o problema (ex.: conectar o Google)
+    action: Literal["google_connect", "google_reconnect", "google_waiting"] | None = None
 
 
 # --- E-mail ---------------------------------------------------------------
@@ -253,6 +255,12 @@ class Briefing(BaseModel):
     highlights: list[Highlight] = []
     generated_at: datetime
     generator: Literal["rules", "ai"] = "rules"
+
+
+class GoogleStatusResponse(BaseModel):
+    # demo | not_configured | disconnected | connecting | connected | expired | error
+    state: str
+    message: str | None = None
 
 
 class UnlockRequest(BaseModel):

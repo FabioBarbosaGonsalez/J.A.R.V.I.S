@@ -21,6 +21,7 @@ from app.models import (
     ChatResponse,
     Deliverable,
     Email,
+    GoogleStatusResponse,
     Market,
     PanelResponse,
     Portfolio,
@@ -105,22 +106,40 @@ def get_status(settings: SettingsDep):
     )
 
 
+Force = Annotated[bool, Query(description="Ignora o cache (com um intervalo mínimo entre buscas).")]
+
+
 @app.get("/api/emails", response_model=PanelResponse[list[Email]])
-def get_emails(settings: SettingsDep, simulate: Simulate = None):
-    return _panel(sources.emails_panel, settings, simulate)
+def get_emails(settings: SettingsDep, simulate: Simulate = None, force: Force = False):
+    return _panel(lambda s: sources.emails_panel(s, force=force), settings, simulate)
 
 
 @app.get("/api/calendar", response_model=PanelResponse[list[CalendarEvent]])
-def get_calendar(settings: SettingsDep, simulate: Simulate = None):
-    return _panel(sources.calendar_panel, settings, simulate)
+def get_calendar(settings: SettingsDep, simulate: Simulate = None, force: Force = False):
+    return _panel(lambda s: sources.calendar_panel(s, force=force), settings, simulate)
+
+
+# --- Conexão com o Google (Gmail e Agenda) --------------------------------------
+
+@app.get("/api/google/status", response_model=GoogleStatusResponse)
+def google_status(settings: SettingsDep):
+    if settings.demo_mode:
+        return GoogleStatusResponse(state="demo")
+    status = sources.get_google_auth(settings).status()
+    return GoogleStatusResponse(state=status.state, message=status.message)
+
+
+@app.post("/api/google/connect", response_model=GoogleStatusResponse)
+def google_connect(settings: SettingsDep):
+    """Abre o consentimento do Google no navegador desta máquina (só leitura)."""
+    if settings.demo_mode:
+        return GoogleStatusResponse(state="demo")
+    status = sources.get_google_auth(settings).start_connect()
+    return GoogleStatusResponse(state=status.state, message=status.message)
 
 
 @app.get("/api/canvas", response_model=PanelResponse[list[Deliverable]])
-def get_canvas(
-    settings: SettingsDep,
-    simulate: Simulate = None,
-    force: Annotated[bool, Query(description="Ignora o cache (no máximo uma vez por minuto).")] = False,
-):
+def get_canvas(settings: SettingsDep, simulate: Simulate = None, force: Force = False):
     return _panel(lambda s: sources.canvas_panel(s, force=force), settings, simulate)
 
 

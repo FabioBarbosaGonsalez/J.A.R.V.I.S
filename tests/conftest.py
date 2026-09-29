@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app import sources
 from app.cache import Cache
 from app.config import Settings, get_settings
+from app.connectors.google_auth import GoogleAuth
 from app.connectors.http import read_only_client
 from app.main import app
 
@@ -18,11 +19,17 @@ def _no_network(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"Teste tentou acessar a rede: {request.url.host}")
 
 
+def _no_browser(credentials_path):
+    raise AssertionError("Teste tentou abrir o login do Google")
+
+
 @pytest.fixture(autouse=True)
 def isolated_sources(tmp_path, monkeypatch):
-    """Cache temporário e nenhuma chamada de rede real em nenhum teste."""
+    """Cache temporário, nenhuma chamada de rede real e nenhum arquivo real do Google."""
     monkeypatch.setattr(sources, "get_cache", lambda: Cache(tmp_path / "cache.sqlite3"))
     monkeypatch.setattr(sources, "get_http", lambda: read_only_client(transport=httpx.MockTransport(_no_network)))
+    google = GoogleAuth(tmp_path / "credentials.json", tmp_path / "token.json", run_flow=_no_browser)
+    monkeypatch.setattr(sources, "get_google_auth", lambda settings: google)
 
 
 @pytest.fixture
