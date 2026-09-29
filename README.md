@@ -2,7 +2,9 @@
 
 Assistente pessoal que roda **localmente no Windows** e reúne num painel único os e-mails (Gmail), a agenda (Google Calendar), as entregas da faculdade (Canvas da PUC-Campinas) e a carteira de investimentos. Um "cérebro" de IA cruza essas informações, gera um briefing do dia e responde por texto e por voz.
 
-> **Status: Fase 1 de 5.** A interface completa já funciona com **dados de demonstração**. As integrações reais chegam nas próximas fases.
+> Projeto pessoal de fã, sem afiliação com Marvel ou Disney. O visual é inspirado na ideia de um assistente em HUD, mas tudo foi criado do zero em CSS, SVG e canvas: nenhum logo, imagem, som ou voz de filme é usado.
+
+> **Status: Fase 1 de 6.** A interface completa já funciona com **dados de demonstração**. As integrações reais chegam nas próximas fases.
 
 <!-- Espaço reservado: adicione aqui um print ou GIF do painel -->
 <!-- ![Painel HUD](docs/painel.png) -->
@@ -16,6 +18,7 @@ Assistente pessoal que roda **localmente no Windows** e reúne num painel único
 | 3 | Gmail e Google Calendar (OAuth, somente leitura) | ⏳ |
 | 4 | Cérebro: IA com ferramentas, briefing do dia e chat | ⏳ |
 | 5 | Acabamento: erros, testes, README final e `iniciar.ps1` | ⏳ |
+| 6 | Extras: animação de abertura na borda da tela e seletor de voz (Piper TTS opcional) | ⏳ |
 
 ## Requisitos
 
@@ -55,10 +58,11 @@ A documentação interativa da API fica em http://127.0.0.1:8000/api/docs.
 
 ## Usando o painel
 
-- **Falar:** segure **Espaço** e fale; solte para enviar. Ou clique no microfone (ele para sozinho quando você fica em silêncio).
+- **Falar:** segure **Espaço** e fale; solte para enviar. Funciona também com o cursor no campo de mensagem, desde que ele esteja vazio; com texto no campo, o Espaço digita normalmente. Ou clique no microfone (ele para sozinho quando você fica em silêncio).
 - **Interromper:** **Esc** para de ouvir e de falar.
 - **Voz das respostas:** o botão de alto-falante ao lado do campo liga e desliga a fala.
 - **Briefing em voz alta:** o botão de alto-falante no painel do briefing.
+- **Sistemas:** o indicador no topo mostra quantas fontes (agenda, e-mails, faculdade e carteira) estão online. Passe o mouse para ver o estado de cada uma.
 - **Atualizar:** cada painel tem seu botão ↻, e o botão "Atualizar" no topo recarrega todos. A atualização automática roda a cada `REFRESH_SECONDS` (padrão: 5 minutos).
 
 No modo demonstração, o chat entende perguntas sobre **entregas, e-mails, agenda e carteira**. Na Fase 4 ele passa a usar IA.
@@ -85,7 +89,7 @@ python -m pytest
 | Variável | Para que serve | Padrão |
 |----------|----------------|--------|
 | `ASSISTANT_NAME` | Nome exibido e falado pelo assistente | `J.A.R.V.I.S` |
-| `USER_NAME` | Como o briefing chama você | vazio |
+| `USER_NAME` | Como o assistente chama você: seu nome ou um tratamento como `senhor` ou `senhora` | vazio |
 | `PORT` | Porta local do servidor | `8000` |
 | `TIMEZONE` | Fuso horário | `America/Sao_Paulo` |
 | `REFRESH_SECONDS` | Intervalo da atualização automática | `300` |
@@ -125,4 +129,5 @@ jarvis/
 - **Os dados de demonstração usam os mesmos modelos que os dados reais.** As próximas fases trocam só `sources.py`; as rotas e a interface não mudam.
 - **Cálculos da carteira nos modelos** (`computed_field`): valor de mercado, resultado sobre o preço médio, variação do dia e distribuição por tipo ficam num só lugar, testado.
 - **Briefing por regras:** já cruza as fontes (prazo apertado + e-mail do professor + agenda até o prazo). Na Fase 4 a IA assume a redação, e as regras ficam como plano B quando a cota acabar.
+- **Tom e visual inspirados, não copiados:** o assistente fala como um mordomo educado e direto, com frases próprias. O núcleo usa a linguagem visual de HUD (anéis concêntricos, varredura de radar, anel de barras como visualizador de voz), desenhada em canvas. A voz preferida é uma voz masculina gratuita já disponível no Edge ou no Windows; nenhuma voz real é imitada.
 - **"Reagir ao áudio":** a `speechSynthesis` não expõe o áudio gerado. O núcleo reage aos eventos de palavra da fala, somados a uma modulação sintética para as vozes que não emitem esses eventos.

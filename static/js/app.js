@@ -29,6 +29,7 @@ const ui = {
 };
 
 let assistantName = 'J.A.R.V.I.S';
+let address = ''; // como o assistente chama você (USER_NAME)
 let refreshMs = 300_000;
 let lastRefresh = 0;
 let speakEnabled = readPref('speak', true);
@@ -169,22 +170,31 @@ function updateVoiceToggle() {
 const isTypingTarget = (el) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
-// Segurar Espaço = falar (push-to-talk). Ignorado enquanto você digita num campo.
+// O Espaço vira "falar" em qualquer lugar, inclusive no campo de mensagem enquanto
+// ele está vazio (depois de enviar, o foco continua lá). Com texto no campo, ou em
+// outros campos, o Espaço volta a ser só um espaço.
+const spaceTalks = (el) => !isTypingTarget(el) || (el === ui.input && ui.input.value.trim() === '');
+
+// Segurar Espaço = falar (push-to-talk)
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     stopEverything();
     return;
   }
-  if (event.code !== 'Space' || isTypingTarget(event.target) || event.ctrlKey || event.altKey || event.metaKey) return;
-  event.preventDefault(); // não rolar a página nem "clicar" o botão focado
+  if (event.code !== 'Space' || !spaceTalks(event.target) || event.ctrlKey || event.altKey || event.metaKey) return;
+  event.preventDefault(); // não rolar a página, não digitar espaços nem "clicar" o botão focado
   if (event.repeat || pushToTalk || voice.listening) return;
   pushToTalk = startListening(true);
 });
 
 document.addEventListener('keyup', (event) => {
-  if (event.code !== 'Space' || isTypingTarget(event.target)) return;
-  event.preventDefault();
-  if (pushToTalk) voice.stopListening();
+  if (event.code !== 'Space') return;
+  if (pushToTalk) {
+    event.preventDefault();
+    voice.stopListening();
+  } else if (!isTypingTarget(event.target)) {
+    event.preventDefault();
+  }
 });
 
 // Se a janela perder o foco com o Espaço apertado, o keyup nunca chega
@@ -280,6 +290,7 @@ async function init() {
   try {
     const status = await getJSON('/api/status');
     assistantName = status.assistant_name;
+    address = status.user_name;
     refreshMs = Math.max(30, status.refresh_seconds) * 1000;
     document.title = assistantName;
     $('#assistant-name').textContent = assistantName;
@@ -293,7 +304,8 @@ async function init() {
   scheduleRefresh();
 
   const hint = voice.canListen ? 'Pergunte algo ou segure Espaço para falar.' : 'Pergunte algo pelo campo de texto.';
-  typeText(addMessage('ai'), `Sistemas online. ${hint}`, { cps: 45 });
+  const toYou = address ? `, ${address}` : '';
+  typeText(addMessage('ai'), `Sistemas online. À sua disposição${toYou}. ${hint}`, { cps: 45 });
 }
 
 init();

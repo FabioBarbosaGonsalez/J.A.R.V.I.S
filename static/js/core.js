@@ -2,6 +2,10 @@
 //
 // Estados: idle (pulso lento), listening (onda suave), thinking (anéis âmbar
 // girando rápido) e speaking (onda e brilho que reagem à fala).
+//
+// O desenho segue a linguagem visual de interfaces de assistente em HUD
+// (anéis concêntricos, varredura de radar, anel de barras como visualizador de voz),
+// criada do zero aqui: nenhum asset de filme ou marca.
 // Os parâmetros visuais de cada estado são interpolados suavemente, então a
 // troca de estado nunca "pula".
 //
@@ -10,12 +14,14 @@
 // modulação sintética, que dá o mesmo efeito visual mesmo nas vozes que não
 // emitem esses eventos.
 
+// bars: energia do anel de barras; sweep: intensidade da varredura de radar
 const PRESETS = {
-  idle:      { spin: 0.12, pulseHz: 0.22, pulseAmp: 0.05,  warm: 0,    wave: 0,    glow: 0.55 },
-  listening: { spin: 0.35, pulseHz: 0.9,  pulseAmp: 0.025, warm: 0,    wave: 0.55, glow: 0.85 },
-  thinking:  { spin: 1.8,  pulseHz: 1.4,  pulseAmp: 0.02,  warm: 1,    wave: 0,    glow: 0.7 },
-  speaking:  { spin: 0.45, pulseHz: 0,    pulseAmp: 0,     warm: 0.25, wave: 1,    glow: 0.9 },
+  idle:      { spin: 0.12, pulseHz: 0.22, pulseAmp: 0.05,  warm: 0,    wave: 0,    glow: 0.55, bars: 0.06, sweep: 1 },
+  listening: { spin: 0.35, pulseHz: 0.9,  pulseAmp: 0.025, warm: 0,    wave: 0.55, glow: 0.85, bars: 0.5,  sweep: 0.35 },
+  thinking:  { spin: 1.8,  pulseHz: 1.4,  pulseAmp: 0.02,  warm: 1,    wave: 0,    glow: 0.7,  bars: 0.12, sweep: 1.2 },
+  speaking:  { spin: 0.45, pulseHz: 0,    pulseAmp: 0,     warm: 0.25, wave: 1,    glow: 0.9,  bars: 0.3,  sweep: 0.25 },
 };
+const BARS = 72;
 
 const CYAN = [76, 214, 255];
 const AMBER = [255, 181, 71];
@@ -119,6 +125,43 @@ export function createCore(canvas) {
     }
     ctx.restore();
 
+    // Varredura de radar: borda nítida na frente, rastro que some atrás
+    if (p.sweep > 0.02 && ctx.createConicGradient) {
+      const sweepAngle = angle * 1.6;
+      const sweep = ctx.createConicGradient(sweepAngle, 0, 0);
+      sweep.addColorStop(0, rgba(color, 0));
+      sweep.addColorStop(0.84, rgba(color, 0));
+      sweep.addColorStop(1, rgba(color, 0.13 * p.sweep));
+      ctx.fillStyle = sweep;
+      ctx.beginPath();
+      ctx.arc(0, 0, R * 0.88, 0, TAU);
+      ctx.fill();
+
+      ctx.strokeStyle = rgba(color, 0.35 * p.sweep);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(sweepAngle) * R * 0.36, Math.sin(sweepAngle) * R * 0.36);
+      ctx.lineTo(Math.cos(sweepAngle) * R * 0.88, Math.sin(sweepAngle) * R * 0.88);
+      ctx.stroke();
+    }
+
+    // Marcadores triangulares entre o anel segmentado e as marcações
+    ctx.save();
+    ctx.rotate(-angle * 0.7);
+    ctx.fillStyle = rgba(color, 0.8);
+    for (const a0 of [0, Math.PI]) {
+      ctx.save();
+      ctx.rotate(a0);
+      ctx.beginPath();
+      ctx.moveTo(R * 0.848, 0);
+      ctx.lineTo(R * 0.884, -R * 0.018);
+      ctx.lineTo(R * 0.884, R * 0.018);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+
     // Anel segmentado
     ctx.save();
     ctx.rotate(angle);
@@ -141,6 +184,27 @@ export function createCore(canvas) {
     ctx.beginPath();
     ctx.arc(0, 0, R * 0.72, 0, TAU);
     ctx.stroke();
+    ctx.restore();
+
+    // Anel de barras radiais: o "visualizador de voz" do assistente.
+    // Em espera quase some; ouvindo e falando, as barras oscilam com a energia.
+    // Pensando, uma região âmbar percorre o anel.
+    ctx.save();
+    ctx.rotate(-angle * 0.5);
+    ctx.lineWidth = Math.max(1, R * 0.008);
+    for (let i = 0; i < BARS; i++) {
+      const a = (i / BARS) * TAU;
+      const n = 0.5 + 0.5 * Math.sin(a * 5 + t * 5.1) * Math.sin(a * 3 - t * 3.7);
+      const chase = Math.max(0, Math.cos(a - angle * 2.5)) ** 8;
+      const e = Math.min(1, p.bars * (0.3 + 0.7 * n) + level * n * 0.9 + p.warm * chase * 0.9);
+      const r1 = R * 0.745;
+      const r2 = r1 + R * (0.008 + 0.06 * e);
+      ctx.strokeStyle = rgba(mix(color, AMBER, chase * p.warm), 0.22 + 0.6 * e);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.stroke();
+    }
     ctx.restore();
 
     // Arcos do estado "pensando"

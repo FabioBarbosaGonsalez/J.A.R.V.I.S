@@ -135,5 +135,5 @@ def get_briefing(settings: SettingsDep, simulate: Simulate = None):
 @app.post("/api/chat", response_model=ChatResponse)
 def post_chat(body: ChatRequest, settings: SettingsDep):
     now = datetime.now(settings.tz)
-    reply = demo_reply(body.message, sources.snapshot(settings), now, settings.assistant_name)
+    reply = demo_reply(body.message, sources.snapshot(settings), now, settings.assistant_name, settings.user_name)
     return ChatResponse(reply=reply, generator="demo")

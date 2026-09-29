@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # Geral
     assistant_name: str = "J.A.R.V.I.S"
+    # Como o assistente chama você: um nome ou um tratamento formal ("senhor", "senhora")
     user_name: str = ""
     port: int = 8000
     timezone: str = "America/Sao_Paulo"

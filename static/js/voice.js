@@ -8,6 +8,11 @@ const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const LANG = 'pt-BR';
 const MAX_CHUNK = 180; // o Chrome costuma cortar falas longas; falamos em pedaços
 
+// Vozes pt-BR masculinas e calmas, combinando com o tom de mordomo, em ordem de
+// preferência: a neural do Edge e a instalada no Windows. Se não existirem,
+// seguimos para as outras. O seletor de voz na interface vem na Fase 6.
+const PREFERRED_VOICES = [/antonio/i, /daniel/i];
+
 const ERRORS = {
   'not-allowed': 'Permissão do microfone negada. Libere o microfone no cadeado da barra de endereço.',
   'service-not-allowed': 'O navegador bloqueou o reconhecimento de voz.',
@@ -49,7 +54,9 @@ export function createVoice({ onListenStart, onInterim, onListenEnd, onError } =
   function pickVoice() {
     const voices = window.speechSynthesis.getVoices();
     const ptBR = voices.filter((v) => v.lang?.replace('_', '-').toLowerCase() === 'pt-br');
+    const preferred = PREFERRED_VOICES.map((re) => ptBR.find((v) => re.test(v.name))).find(Boolean);
     voice =
+      preferred ||
       ptBR.find((v) => /natural|online/i.test(v.name)) || // vozes neurais do Edge
       ptBR.find((v) => /google/i.test(v.name)) ||
       ptBR[0] ||
@@ -141,7 +148,7 @@ export function createVoice({ onListenStart, onInterim, onListenEnd, onError } =
       const utterance = new SpeechSynthesisUtterance(chunks[index++]);
       utterance.lang = LANG;
       if (voice) utterance.voice = voice;
-      utterance.rate = 1.03;
+      utterance.rate = 1; // ritmo calmo
       utterance.onstart = () => {
         if (!started) {
           started = true;

@@ -204,6 +204,33 @@ export const PANELS = {
 // Painéis com tempo relativo ("há 3 h", "em 20 h") redesenhados a cada minuto
 const TIME_SENSITIVE = ['calendar', 'email', 'canvas'];
 
+// Fontes de dados mostradas no diagnóstico do cabeçalho (o briefing deriva delas)
+const SYSTEMS = { calendar: 'Agenda', email: 'E-mails', canvas: 'Faculdade', portfolio: 'Carteira' };
+const STATUS_LABEL = { ok: 'online', not_configured: 'não configurado', error: 'erro' };
+
+// --- Diagnóstico dos sistemas -----------------------------------------------
+
+function updateSystems() {
+  const names = Object.keys(SYSTEMS);
+  const statuses = names.map((name) => responses[name]?.status);
+  if (statuses.some((s) => s === undefined)) return; // ainda carregando pela primeira vez
+
+  const online = statuses.filter((s) => s === 'ok').length;
+  const level = online === names.length ? 'ok' : statuses.includes('error') ? 'error' : 'partial';
+
+  const container = document.getElementById('sys-status');
+  container.dataset.level = level;
+  container.title = names.map((name, i) => `${SYSTEMS[name]}: ${STATUS_LABEL[statuses[i]]}`).join('\n');
+
+  document.getElementById('sys-dots').replaceChildren(
+    ...names.map((name, i) => h('i', { class: `sys-dot is-${statuses[i]}` })),
+  );
+  // Só troca o texto quando muda, para leitores de tela não repetirem o anúncio
+  const count = document.getElementById('sys-count');
+  const text = `${online}/${names.length} online`;
+  if (count.textContent !== text) count.textContent = text;
+}
+
 // --- Estados ---------------------------------------------------------------
 
 function skeleton(lines = 4) {
@@ -260,6 +287,7 @@ export async function loadPanel(name) {
     responses[name] = { status: 'error', message: err.message };
   }
   paint(name);
+  updateSystems();
   section.classList.remove('is-loading');
   section.removeAttribute('aria-busy');
 }

@@ -2,13 +2,15 @@
 
 Respostas por palavras-chave, só para testar o fluxo de texto e voz na Fase 1.
 Na Fase 4, o modelo de IA decide quais ferramentas chamar; esta função some.
-As respostas são escritas para serem faladas: frases curtas, sem símbolos.
+As respostas são escritas para serem faladas: frases curtas, sem símbolos, no
+tom de um mordomo educado e direto (texto próprio, nada copiado de filmes).
 """
 
 import re
 from datetime import datetime
 
 from app.formatting import brl, duration, normalize, pct, plural
+from app.models import CalendarEvent
 from app.sources import Snapshot
 
 # A ordem importa: o primeiro tópico que casar vence.
@@ -36,13 +38,23 @@ def _topic(message: str) -> str | None:
     return None
 
 
-def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str) -> str:
+def _event_when(ev: CalendarEvent, now: datetime) -> str:
+    if ev.all_day:
+        return "dia inteiro"
+    if ev.start <= now:
+        return f"em andamento até as {ev.end:%H:%M}"
+    return ev.start.strftime("%d/%m às %H:%M")
+
+
+def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str, address: str = "") -> str:
+    """`address` é como o assistente chama você (USER_NAME): um nome ou "senhor"."""
     topic = _topic(message)
+    to_you = f", {address}" if address else ""
 
     if topic == "advice":
         return (
-            "Eu não faço recomendações de compra ou venda. "
-            "Posso descrever como está a sua carteira, se quiser."
+            f"Receio que isso não seja comigo{to_you}: não faço recomendações de compra ou venda. "
+            "Posso descrever como está a sua carteira, se desejar."
         )
 
     if topic == "deliverables" and snap.deliverables is not None:
@@ -63,10 +75,7 @@ def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str)
         upcoming = [ev for ev in snap.events if ev.end > now][:3]
         if not upcoming:
             return "Sua agenda está livre nos próximos dias."
-        items = "; ".join(
-            f"{ev.title}, {'dia inteiro' if ev.all_day else ev.start.strftime('%d/%m às %H:%M')}"
-            for ev in upcoming
-        )
+        items = "; ".join(f"{ev.title}, {_event_when(ev, now)}" for ev in upcoming)
         return f"Seus próximos compromissos: {items}."
 
     if topic == "portfolio" and snap.portfolio is not None:
@@ -77,9 +86,12 @@ def demo_reply(message: str, snap: Snapshot, now: datetime, assistant_name: str)
         )
 
     if topic == "greeting":
-        return f"Olá. Aqui é {assistant_name}, em modo demonstração. Pergunte sobre entregas, e-mails, agenda ou carteira."
+        return (
+            f"Olá{to_you}. {assistant_name} à sua disposição, em modo demonstração. "
+            "Pergunte sobre entregas, e-mails, agenda ou carteira."
+        )
 
     return (
-        "Estou em modo demonstração e ainda entendo só alguns assuntos: "
-        "entregas, e-mails, agenda e carteira. Na Fase 4 eu passo a responder perguntas livres."
+        f"Receio que, em modo demonstração, eu entenda apenas alguns assuntos{to_you}: "
+        "entregas, e-mails, agenda e carteira. Na Fase 4 passo a responder perguntas livres."
     )

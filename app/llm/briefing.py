@@ -15,18 +15,19 @@ from app.sources import Snapshot
 BUSY_DAY_THRESHOLD = 4
 
 
-def _greeting(now: datetime, user_name: str) -> str:
+def _greeting(now: datetime, address: str) -> str:
     if 5 <= now.hour < 12:
         greeting = "Bom dia"
     elif now.hour < 18:
         greeting = "Boa tarde"
     else:
         greeting = "Boa noite"
-    return f"{greeting}, {user_name}." if user_name else f"{greeting}."
+    return f"{greeting}, {address}." if address else f"{greeting}."
 
 
-def build_rule_briefing(snap: Snapshot, now: datetime, user_name: str = "") -> Briefing:
-    parts: list[str] = [_greeting(now, user_name)]
+def build_rule_briefing(snap: Snapshot, now: datetime, address: str = "") -> Briefing:
+    """`address` é como o assistente chama você (USER_NAME): um nome ou "senhor"."""
+    parts: list[str] = [_greeting(now, address)]
     highlights: list[Highlight] = []
 
     # Faculdade: o que vence primeiro, cruzado com e-mails e agenda
@@ -72,20 +73,30 @@ def build_rule_briefing(snap: Snapshot, now: datetime, user_name: str = "") -> B
                 text += f", {len(from_uni)} da faculdade"
             parts.append(text + ".")
             if from_uni:
-                highlights.append(Highlight(level="warning", text=f"{len(from_uni)} e-mail(s) da faculdade não lido(s)"))
+                highlights.append(Highlight(
+                    level="warning",
+                    text=plural(len(from_uni), "e-mail da faculdade não lido", "e-mails da faculdade não lidos"),
+                ))
         else:
             parts.append("Sua caixa de entrada está em dia.")
 
-    # Agenda de hoje
+    # Agenda de hoje: o que está acontecendo agora não é "o próximo"
     if snap.events is not None:
         today = [ev for ev in snap.events if ev.start.date() == now.date() and not ev.all_day]
-        remaining = [ev for ev in today if ev.end > now]
-        if remaining:
-            nxt = remaining[0]
+        ongoing = [ev for ev in today if ev.start <= now < ev.end]
+        upcoming = [ev for ev in today if ev.start > now]
+        if ongoing:
+            parts.append(f"Em andamento: {ongoing[0].title}, até {ongoing[0].end:%H:%M}.")
+        if upcoming:
+            nxt = upcoming[0]
+            lead = "Depois, ainda" if ongoing else "Hoje ainda"
+            verb = "resta" if len(upcoming) == 1 else "restam"
             parts.append(
-                f"Hoje ainda restam {plural(len(remaining), 'compromisso', 'compromissos')}; "
+                f"{lead} {verb} {plural(len(upcoming), 'compromisso', 'compromissos')}; "
                 f"o próximo é {nxt.title}, às {nxt.start:%H:%M}."
             )
+        elif ongoing:
+            parts.append("Depois disso, a agenda de hoje está livre.")
         else:
             parts.append("Não há mais compromissos na agenda de hoje.")
         if len(today) >= BUSY_DAY_THRESHOLD:
