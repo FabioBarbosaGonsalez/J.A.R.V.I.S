@@ -278,9 +278,76 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
+# --- Ações com confirmação (Fase 4) -------------------------------------------
+
+class EventDraft(BaseModel):
+    """Evento que a IA propôs criar. Nada é gravado antes do clique em Confirmar."""
+
+    title: str
+    start: datetime
+    end: datetime  # exclusivo; num evento de dia inteiro, 00:00 do dia seguinte
+    all_day: bool = False
+
+    @computed_field
+    @property
+    def duration_minutes(self) -> int:
+        return round((self.end - self.start).total_seconds() / 60)
+
+
+class AssetDraft(BaseModel):
+    """Ativo que a IA propôs inserir na carteira."""
+
+    ticker: str
+    asset_type: AssetType
+    quantity: float
+    price: float  # preço pago, na moeda do ativo
+
+
+class ActionCard(BaseModel):
+    """Cartão de confirmação mostrado no chat.
+
+    O de ativo não traz números: quantidade, preço e o efeito na carteira só
+    aparecem na aba privada.
+    """
+
+    id: str
+    kind: Literal["event", "asset"]
+    expires_at: datetime
+    event: EventDraft | None = None
+    ticker: str | None = None
+
+
+class AssetPreview(BaseModel):
+    """Cartão completo do ativo, só na aba privada: o que muda na carteira."""
+
+    id: str
+    expires_at: datetime
+    draft: AssetDraft
+    currency: Literal["BRL", "USD"]
+    exists: bool = False
+    current_quantity: float | None = None
+    current_avg_price: float | None = None
+    new_quantity: float | None = None
+    new_avg_price: float | None = None
+    # Por que não dá para inserir (ex.: o ativo já existe com outro tipo)
+    problem: str | None = None
+
+
+class ActionResult(BaseModel):
+    ok: bool
+    message: str
+    # Botão que resolve o problema (ex.: reconectar o Google com permissão de criar eventos)
+    action: Literal["google_reconnect"] | None = None
+
+
 class ChatResponse(BaseModel):
     reply: str
-    generator: Literal["demo", "ai"] = "demo"
+    # "rules": palavras-chave, quando a IA não está configurada ou falhou
+    generator: Literal["rules", "ai"] = "rules"
+    # Aviso para mostrar na conversa (ex.: cota da IA esgotada)
+    notice: str | None = None
+    # Propostas de ação que esperam o clique em Confirmar
+    actions: list[ActionCard] = []
 
 
 class StatusResponse(BaseModel):

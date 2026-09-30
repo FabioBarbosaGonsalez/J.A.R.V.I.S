@@ -1,7 +1,7 @@
 // Painéis: carregamento independente, estados (carregando / ok / não configurado /
 // erro) e renderização de cada fonte. Se uma fonte falhar, só o painel dela muda.
 
-import { getJSON, panelUrl } from './api.js';
+import { AI_TIMEOUT_MS, getJSON, panelUrl } from './api.js';
 import { h, icon } from './dom.js';
 import { connectGoogle } from './google.js';
 import {
@@ -179,6 +179,7 @@ function renderMarket(body, market) {
 export const PANELS = {
   briefing: {
     path: '/api/briefing',
+    timeoutMs: AI_TIMEOUT_MS,
     render: renderBriefing,
     summary: (b) => (b.generator === 'ai' ? 'gerado por IA' : 'gerado por regras'),
   },
@@ -250,7 +251,7 @@ const ACTIONS = {
 };
 
 // Gmail e Agenda dependem da mesma conexão: redesenha os dois, e o briefing
-function refreshGooglePanels() {
+export function refreshGooglePanels() {
   loadPanel('email', { force: true });
   loadPanel('calendar', { force: true });
   loadPanel('briefing');
@@ -310,7 +311,8 @@ export async function loadPanel(name, { force = false } = {}) {
   if (responses[name]?.status !== 'ok') body.replaceChildren(skeleton(name === 'briefing' ? 2 : 4));
 
   try {
-    responses[name] = await getJSON(panelUrl(name, PANELS[name].path, { force }));
+    const { path, timeoutMs } = PANELS[name];
+    responses[name] = await getJSON(panelUrl(name, path, { force }), { timeoutMs });
   } catch (err) {
     responses[name] = { status: 'error', message: err.message };
   }

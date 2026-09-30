@@ -1,1 +1,1 @@
-"""Cérebro do assistente: briefing e chat (por regras na Fase 1; com IA na Fase 4)."""
+"""Cérebro do assistente: briefing, chat e ferramentas (IA com as regras como plano B)."""

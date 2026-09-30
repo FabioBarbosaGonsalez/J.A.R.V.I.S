@@ -5,6 +5,7 @@
 // existem no DOM enquanto a janela está aberta: fechar, bloquear ou trocar de
 // aba/minimizar apaga tudo da tela.
 
+import { countdown, settleCard } from './actions.js';
 import { getJSON, postJSON } from './api.js';
 import { h, icon } from './dom.js';
 import { brl, num, pct, signedBrl, trendClass, usd } from './format.js';
@@ -20,7 +21,8 @@ const TYPE_CLASS = {
 
 const dialog = document.getElementById('private-dialog');
 const content = dialog.querySelector('[data-content]');
-let countdown = 0;
+let unlockWait = 0;
+let stopTimers = []; // contagens regressivas dos cartões de confirmação
 
 const money = (value, currency) => (currency === 'USD' ? usd(value) : brl(value));
 
@@ -30,7 +32,9 @@ const OUTDATED = 'O servidor está rodando uma versão anterior, sem esta aba. R
 const explain = (err) => (err.status === 404 ? OUTDATED : err.message);
 
 function clear() {
-  clearInterval(countdown);
+  clearInterval(unlockWait);
+  stopTimers.forEach((stop) => stop());
+  stopTimers = [];
   content.replaceChildren();
 }
 
@@ -83,29 +87,113 @@ function showUnlockForm(notice = '') {
 }
 
 function waitThenEnable(button, status, seconds) {
-  clearInterval(countdown);
+  clearInterval(unlockWait);
   let left = seconds;
-  countdown = setInterval(() => {
+  unlockWait = setInterval(() => {
     left -= 1;
     status.textContent = left > 0 ? `Muitas tentativas. Aguarde ${left} s.` : '';
     if (left <= 0) {
-      clearInterval(countdown);
+      clearInterval(unlockWait);
       button.disabled = false;
     }
   }, 1000);
 }
 
 async function showPortfolio() {
+  clear();
   content.replaceChildren(h('p', { class: 'empty' }, 'Carregando carteira…'));
   let res;
+  let pending;
   try {
-    res = await getJSON('/api/private/portfolio');
+    [res, pending] = await Promise.all([
+      getJSON('/api/private/portfolio'),
+      getJSON('/api/private/actions').catch(() => []),
+    ]);
   } catch (err) {
     if (err.status === 401) return showUnlockForm('Sessão encerrada. Digite a chave novamente.');
     return showMessage(err.status === 404 ? 'Servidor desatualizado' : 'Erro', explain(err));
   }
-  if (res.status !== 'ok') return showMessage(res.status === 'error' ? 'Erro' : 'Não configurado', res.message);
-  renderPortfolio(res.data, res.message);
+  if (res.status !== 'ok') showMessage(res.status === 'error' ? 'Erro' : 'Não configurado', res.message);
+  else renderPortfolio(res.data, res.message);
+  // Ativos propostos pelo chat ficam no topo; aparecem mesmo sem carteira (o primeiro ativo cria o arquivo)
+  if (pending.length) content.prepend(pendingActions(pending));
+}
+
+// --- Ativos aguardando confirmação (propostos pelo chat) -------------------------
+
+function pendingActions(list) {
+  return h('section', { class: 'pf-actions', 'aria-label': 'Ativos aguardando confirmação' },
+    h('h3', { class: 'sub-title' }, 'Aguardando sua confirmação'),
+    list.map(assetCard));
+}
+
+function assetCard(p) {
+  const d = p.draft;
+  const m = (v) => money(v, p.currency);
+  const details = h('dl', { class: 'action-details' },
+    h('dt', {}, 'Ativo'), h('dd', {}, `${d.ticker} (${d.asset_type})`),
+    h('dt', {}, 'Quantidade'), h('dd', {}, num(d.quantity)),
+    h('dt', {}, 'Preço pago'), h('dd', {}, m(d.price)));
+
+  let effect;
+  if (p.problem) {
+    effect = h('p', { class: 'action-problem' }, p.problem);
+  } else if (p.exists) {
+    effect = h('p', { class: 'action-note' },
+      `Já existe na carteira: ${num(p.current_quantity)} a ${m(p.current_avg_price)} de preço médio. `,
+      h('b', {}, `Depois: ${num(p.new_quantity)} a ${m(p.new_avg_price)}.`));
+  } else {
+    effect = h('p', { class: 'action-note' }, 'Ativo novo na carteira. Uma cópia de segurança é feita antes de gravar.');
+  }
+
+  const status = h('p', { class: 'action-status', role: 'status' });
+  const confirm = h('button', { class: 'btn', type: 'button', disabled: Boolean(p.problem) }, icon('check'), 'Confirmar');
+  const cancel = h('button', { class: 'btn btn-ghost', type: 'button' }, 'Cancelar');
+  const buttons = h('div', { class: 'action-buttons' }, confirm, cancel);
+  const box = h('div', { class: 'action-card', 'data-kind': 'asset' },
+    h('p', { class: 'action-kind' }, 'Inserir ativo'), details, effect, buttons, status);
+
+  let stop = () => {};
+  const settle = (message, ok) => {
+    stop();
+    buttons.remove();
+    box.classList.add(ok ? 'is-done' : 'is-closed');
+    status.textContent = message;
+    settleCard(p.id, message, ok); // atualiza o cartão do chat
+  };
+  stop = countdown(p.expires_at, status, () => settle('Expirou. Se ainda quiser, peça de novo.', false));
+  stopTimers.push(() => stop());
+
+  confirm.addEventListener('click', async () => {
+    confirm.disabled = true;
+    cancel.disabled = true;
+    status.textContent = 'Gravando…';
+    try {
+      const result = await postJSON(`/api/private/actions/${encodeURIComponent(p.id)}/confirm`, {});
+      if (result.ok) {
+        settleCard(p.id, result.message, true);
+        return showPortfolio(); // recarrega com a posição nova
+      }
+      status.textContent = result.message;
+    } catch (err) {
+      if (err.status === 401) return showUnlockForm('Sessão encerrada. Digite a chave novamente.');
+      if (err.status === 410) return settle(err.message, false);
+      status.textContent = explain(err);
+    }
+    confirm.disabled = false;
+    cancel.disabled = false;
+  });
+
+  cancel.addEventListener('click', async () => {
+    cancel.disabled = true;
+    try {
+      settle((await postJSON(`/api/actions/${encodeURIComponent(p.id)}/cancel`, {})).message, false);
+    } catch (err) {
+      settle(err.message, false);
+    }
+  });
+
+  return box;
 }
 
 function renderPortfolio(pf, note) {

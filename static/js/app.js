@@ -1,9 +1,11 @@
 // Ponto de entrada da interface: liga núcleo, voz, conversa e painéis.
 
-import { getJSON, postJSON } from './api.js';
+import { actionCard } from './actions.js';
+import { AI_TIMEOUT_MS, getJSON, postJSON } from './api.js';
 import { createCore } from './core.js';
 import { h } from './dom.js';
-import { loadAll, loadPanel, panelData, repaintTimeSensitive } from './panels.js';
+import { connectGoogle } from './google.js';
+import { loadAll, loadPanel, panelData, refreshGooglePanels, repaintTimeSensitive } from './panels.js';
 import { openPrivate, privateOpen } from './private.js';
 import { typeText } from './typewriter.js';
 import { createVoice } from './voice.js';
@@ -65,14 +67,28 @@ function setCoreState(state) {
 
 // --- Conversa -----------------------------------------------------------------
 
+function appendToTranscript(node) {
+  ui.transcript.append(node);
+  while (ui.transcript.childElementCount > MAX_MESSAGES) ui.transcript.firstElementChild.remove();
+  scrollTranscript();
+}
+
 function addMessage(role, text = '') {
   const who = role === 'user' ? 'Você' : role === 'ai' ? assistantName : 'Sistema';
   const paragraph = h('p', {}, text);
-  ui.transcript.append(h('div', { class: `msg msg-${role}` }, h('span', { class: 'msg-who' }, who), paragraph));
-  while (ui.transcript.childElementCount > MAX_MESSAGES) ui.transcript.firstElementChild.remove();
-  scrollTranscript();
+  appendToTranscript(h('div', { class: `msg msg-${role}` }, h('span', { class: 'msg-who' }, who), paragraph));
   return paragraph;
 }
+
+// O que os cartões de confirmação podem pedir à interface
+const actionHooks = {
+  refreshCalendar: () => {
+    loadPanel('calendar', { force: true });
+    loadPanel('briefing');
+  },
+  openPrivate: () => openPrivate(),
+  connectGoogle: () => connectGoogle(refreshGooglePanels),
+};
 
 function scrollTranscript() {
   ui.transcript.scrollTop = ui.transcript.scrollHeight;
@@ -109,8 +125,12 @@ async function ask(text) {
   addMessage('user', message);
   setCoreState('thinking');
   try {
-    const { reply } = await postJSON('/api/chat', { message });
+    const { reply, notice, actions = [] } = await postJSON('/api/chat', { message }, { timeoutMs: AI_TIMEOUT_MS });
+    // Ex.: cota da IA esgotada; a resposta veio das regras básicas
+    if (notice) addMessage('system', notice);
     respond(reply);
+    // Ações propostas pela IA: só são gravadas com o clique em Confirmar
+    for (const card of actions) appendToTranscript(actionCard(card, actionHooks));
   } catch (err) {
     addMessage('system', `Não consegui responder agora. ${err.message}`);
     setCoreState('idle');

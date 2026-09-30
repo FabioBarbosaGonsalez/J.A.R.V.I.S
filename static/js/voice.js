@@ -6,6 +6,8 @@
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const LANG = 'pt-BR';
+// Velocidade da fala (1 = normal do navegador). Um pouco acima do normal, ainda calma.
+const SPEECH_RATE = 1.15;
 const MAX_CHUNK = 180; // o Chrome costuma cortar falas longas; falamos em pedaços
 
 // Vozes pt-BR masculinas e calmas, combinando com o tom de mordomo, em ordem de
@@ -148,7 +150,7 @@ export function createVoice({ onListenStart, onInterim, onListenEnd, onError } =
       const utterance = new SpeechSynthesisUtterance(chunks[index++]);
       utterance.lang = LANG;
       if (voice) utterance.voice = voice;
-      utterance.rate = 1; // ritmo calmo
+      utterance.rate = SPEECH_RATE;
       utterance.onstart = () => {
         if (!started) {
           started = true;

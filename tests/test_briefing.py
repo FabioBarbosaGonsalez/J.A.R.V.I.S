@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.llm.briefing import build_rule_briefing
-from app.llm.chat import demo_reply
+from app.llm.chat import rule_reply
 from app.models import CalendarEvent, Email
 from app.sources import Snapshot
 
@@ -59,10 +59,10 @@ def test_greeting_uses_configured_address():
 
 def test_chat_marks_ongoing_event():
     s = snap(events=[event("a", 14, 16, "Aula"), event("b", 19, 20, "Academia")])
-    reply = demo_reply("o que tenho na agenda?", s, NOW, "J.A.R.V.I.S")
+    reply = rule_reply("o que tenho na agenda?", s, NOW, "J.A.R.V.I.S")
     assert "Aula, em andamento até as 16:00" in reply
 
 
 def test_chat_greeting_addresses_user():
-    reply = demo_reply("olá", snap(), NOW, "J.A.R.V.I.S", "senhor")
+    reply = rule_reply("olá", snap(), NOW, "J.A.R.V.I.S", "senhor")
     assert reply.startswith("Olá, senhor. J.A.R.V.I.S à sua disposição")

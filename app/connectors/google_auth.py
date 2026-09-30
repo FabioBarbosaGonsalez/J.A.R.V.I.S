@@ -1,7 +1,12 @@
 """Conexão com o Google (Gmail e Agenda) por OAuth 2.0, credencial do tipo "Desktop app".
 
-- Escopos só de leitura: `gmail.readonly` e `calendar.readonly`. Mesmo que o
-  código tentasse, o Google recusaria enviar e-mail ou criar evento.
+- Gmail só leitura (`gmail.readonly`): mesmo que o código tentasse, o Google
+  recusaria enviar, apagar ou alterar e-mails.
+- Agenda com `calendar.events` (ler e criar eventos), para as ações com
+  confirmação da Fase 4. O código só cria eventos na agenda principal e nunca
+  edita nem apaga (ver `gcalendar.create_event`).
+- Conexões feitas antes da Fase 4 (`calendar.readonly`) continuam lendo
+  normalmente; só criar eventos pede uma nova autorização.
 - O login roda na sua máquina: o botão "Conectar Google" abre o consentimento
   no seu navegador, e o Google devolve a autorização para um servidor
   temporário em `localhost` (o fluxo padrão de apps desktop).
@@ -29,9 +34,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from app.connectors.http import ConnectorError
 from app.models import PanelResponse
 
+CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    CALENDAR_WRITE_SCOPE,
 ]
 LOGIN_TIMEOUT = 300  # segundos para concluir a autorização no navegador
 
@@ -39,12 +45,14 @@ log = logging.getLogger(__name__)
 
 MESSAGES = {
     "not_configured": "Google não configurado: falta a credencial do aplicativo no Google Cloud.",
-    "disconnected": "Google não conectado. Autorize o acesso somente leitura ao Gmail e à Agenda.",
+    "disconnected": "Google não conectado. Autorize a leitura do Gmail e o acesso à Agenda.",
     "connecting": "Aguardando a autorização no navegador…",
     "expired": "A conexão com o Google expirou (com o app em modo de teste, isso acontece a cada 7 dias). "
                "Reconecte para continuar.",
     "invalid": "A conexão salva com o Google não é válida. Conecte de novo.",
     "failed": "Não foi possível conectar ao Google: autorização cancelada, recusada ou tempo esgotado.",
+    "needs_write": "Para criar eventos, reconecte o Google e permita o acesso à Agenda. "
+                   "O Gmail continua somente leitura.",
 }
 
 
@@ -99,7 +107,9 @@ class GoogleAuth:
                 state = "error" if self._failed else "disconnected"
                 raise GoogleNotReady(state, MESSAGES["failed" if self._failed else "disconnected"])
             try:
-                creds = Credentials.from_authorized_user_file(str(self.token_path), SCOPES)
+                # Sem forçar os escopos: a conexão antiga (só leitura) continua valendo para ler.
+                # Pedir na renovação um escopo nunca concedido faria o Google recusar tudo.
+                creds = Credentials.from_authorized_user_file(str(self.token_path))
             except (ValueError, KeyError, json.JSONDecodeError):
                 raise GoogleNotReady("disconnected", MESSAGES["invalid"]) from None
 
@@ -116,8 +126,26 @@ class GoogleAuth:
             self._save(creds)
             return creds
 
+    def can_create_events(self) -> bool:
+        """A conexão salva permite criar eventos? (Conexões antigas eram só leitura.)"""
+        with self._lock:
+            try:
+                info = json.loads(self.token_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return False
+        scopes = info.get("scopes") or []
+        if isinstance(scopes, str):
+            scopes = scopes.split()
+        return CALENDAR_WRITE_SCOPE in scopes
+
     def _save(self, creds: Credentials) -> None:
-        self.token_path.write_text(creds.to_json(), encoding="utf-8")
+        info = json.loads(creds.to_json())
+        # `to_json` grava os escopos pedidos; no consentimento dá para desmarcar
+        # algum. Guardamos os concedidos, quando o Google informa.
+        granted = getattr(creds, "granted_scopes", None)
+        if granted:
+            info["scopes"] = granted.split() if isinstance(granted, str) else list(granted)
+        self.token_path.write_text(json.dumps(info), encoding="utf-8")
 
     def mark_rejected(self) -> None:
         """O Google recusou o token (ex.: acesso revogado): esquece a conexão salva."""

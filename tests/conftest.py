@@ -2,11 +2,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import sources
+from app import actions, sources
 from app.cache import Cache
 from app.config import Settings, get_settings
 from app.connectors.google_auth import GoogleAuth
 from app.connectors.http import read_only_client
+from app.llm import chat
+from app.llm import provider as llm
 from app.main import app
 
 
@@ -30,6 +32,13 @@ def isolated_sources(tmp_path, monkeypatch):
     monkeypatch.setattr(sources, "get_http", lambda: read_only_client(transport=httpx.MockTransport(_no_network)))
     google = GoogleAuth(tmp_path / "credentials.json", tmp_path / "token.json", run_flow=_no_browser)
     monkeypatch.setattr(sources, "get_google_auth", lambda settings: google)
+    # IA desligada por padrão: nenhum teste gasta cota. Quem precisa usa um provedor falso.
+    monkeypatch.setattr(llm, "get_provider", lambda settings: None)
+    chat.memory.clear()
+    # Ações: nenhuma proposta sobra de outro teste, e nada é gravado nos seus arquivos
+    actions.store.clear()
+    monkeypatch.setattr(actions, "HISTORY_FILE", tmp_path / "historico.jsonl")
+    monkeypatch.setattr(sources, "PORTFOLIO_FILE", tmp_path / "carteira.csv")
 
 
 @pytest.fixture

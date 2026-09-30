@@ -84,16 +84,28 @@ class Holding:
 
 # --- Arquivo da carteira ------------------------------------------------------
 
+def decode_portfolio(raw: bytes) -> tuple[str, str]:
+    """Texto do CSV e a codificação em que ele estava (para gravar de volta igual)."""
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig"), "utf-8-sig"
+    try:
+        return raw.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return raw.decode("cp1252"), "cp1252"  # "CSV" salvo pelo Excel no Windows
+
+
+def is_excel_ptbr(text: str) -> bool:
+    """";" é o separador do Excel em português, que também usa vírgula decimal."""
+    return ";" in text.split("\n", 1)[0]
+
+
 def read_portfolio(path: Path) -> list[Holding]:
     """Lê o CSV aceitando o formato do Excel em português (";" e vírgula decimal)."""
-    raw = path.read_bytes()
-    try:
-        text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = raw.decode("cp1252")  # "CSV" salvo pelo Excel no Windows
+    return parse_portfolio(decode_portfolio(path.read_bytes())[0])
 
-    # ";" é o separador do Excel em português, que também usa vírgula decimal
-    excel_ptbr = ";" in text.split("\n", 1)[0]
+
+def parse_portfolio(text: str) -> list[Holding]:
+    excel_ptbr = is_excel_ptbr(text)
     reader = csv.DictReader(io.StringIO(text), delimiter=";" if excel_ptbr else ",")
     reader.fieldnames = [normalize(f).strip().replace(" ", "_") for f in reader.fieldnames or []]
     missing = COLUMNS - set(reader.fieldnames)
@@ -116,14 +128,16 @@ def read_portfolio(path: Path) -> list[Holding]:
     return list(merged.values())
 
 
-def _parse_row(row: dict, line_no: int, excel_ptbr: bool) -> Holding:
-    asset_type = ASSET_TYPES.get(normalize(row["tipo"] or "").strip())
-    if not asset_type:
-        raise PortfolioFileError(
-            f"Linha {line_no}: tipo deve ser ação, FII, ETF, BDR, ETF Internacional ou Tesouro Direto."
-        )
+def validate_asset(raw_ticker: str | None, raw_type: str | None) -> tuple[str, AssetType]:
+    """Ticker e tipo no formato da carteira, ou `PortfolioFileError`.
 
-    raw_ticker = " ".join((row["ticker"] or "").split())
+    As mesmas regras valem para a leitura do CSV e para os ativos inseridos pelo chat.
+    """
+    asset_type = ASSET_TYPES.get(normalize(raw_type or "").strip())
+    if not asset_type:
+        raise PortfolioFileError("tipo deve ser ação, FII, ETF, BDR, ETF Internacional ou Tesouro Direto.")
+
+    raw_ticker = " ".join((raw_ticker or "").split())
     if asset_type == "Tesouro Direto":
         ticker = raw_ticker  # nome do título, ex.: "Tesouro Selic 2031"
         valid = 0 < len(ticker) <= 60
@@ -132,20 +146,31 @@ def _parse_row(row: dict, line_no: int, excel_ptbr: bool) -> Holding:
         pattern = US_TICKER_RE if asset_type == "ETF Internacional" else B3_TICKER_RE
         valid = bool(pattern.match(ticker))
     if not valid:
-        raise PortfolioFileError(f"Linha {line_no}: ticker inválido ({ticker or 'vazio'}).")
+        raise PortfolioFileError(f"ticker inválido ({ticker or 'vazio'}).")
+    return ticker, asset_type
 
+
+def validate_amounts(quantity: float, avg_price: float) -> None:
     # Quantidade pode ser fracionada (ex.: 0.75 de um ETF americano)
-    quantity = _number(row["quantidade"], line_no, "quantidade", excel_ptbr)
-    avg_price = _number(row["preco_medio"], line_no, "preço médio", excel_ptbr)
-    if quantity <= 0 or avg_price < 0:
-        raise PortfolioFileError(f"Linha {line_no}: quantidade deve ser maior que zero e preço médio não pode ser negativo.")
+    if not (0 < quantity < float("inf") and 0 <= avg_price < float("inf")):
+        raise PortfolioFileError("quantidade deve ser maior que zero e preço médio não pode ser negativo.")
+
+
+def _parse_row(row: dict, line_no: int, excel_ptbr: bool) -> Holding:
+    try:
+        ticker, asset_type = validate_asset(row["ticker"], row["tipo"])
+        quantity = _number(row["quantidade"], "quantidade", excel_ptbr)
+        avg_price = _number(row["preco_medio"], "preço médio", excel_ptbr)
+        validate_amounts(quantity, avg_price)
+    except PortfolioFileError as exc:
+        raise PortfolioFileError(f"Linha {line_no}: {exc}") from None
     return Holding(ticker, asset_type, quantity, avg_price)
 
 
 THOUSANDS_RE = re.compile(r"[1-9]\d{0,2}(\.\d{3})+")
 
 
-def _number(text: str | None, line_no: int, column: str, excel_ptbr: bool) -> float:
+def _number(text: str | None, column: str, excel_ptbr: bool) -> float:
     """Aceita "32.50" e "32,50"; no formato do Excel em português, também "1.000" e "1.234,56"."""
     value = (text or "").strip().replace("R$", "").replace("US$", "").replace(" ", "")
     if "," in value:
@@ -155,7 +180,7 @@ def _number(text: str | None, line_no: int, column: str, excel_ptbr: bool) -> fl
     try:
         return float(value)
     except ValueError:
-        raise PortfolioFileError(f"Linha {line_no}: {column} inválido ({text!r}).") from None
+        raise PortfolioFileError(f"{column} inválido ({text!r}).") from None
 
 
 # --- Cotações -------------------------------------------------------------------

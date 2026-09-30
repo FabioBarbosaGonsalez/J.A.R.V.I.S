@@ -1,7 +1,11 @@
-"""Google Agenda: eventos de hoje e dos próximos 7 dias (somente leitura).
+"""Google Agenda: eventos de hoje e dos próximos 7 dias, e criação de eventos.
 
 `singleEvents=true` expande os eventos recorrentes em ocorrências, já na ordem
 de início. Eventos cancelados e os que você recusou ficam de fora.
+
+Criar evento (`create_event`) só acontece depois do clique em Confirmar, e
+sempre na agenda principal. Não existe código para editar nem apagar eventos,
+e o cliente usado recusa qualquer outra operação.
 """
 
 import threading
@@ -14,10 +18,12 @@ import httpx
 from app.cache import Cache
 from app.config import Settings
 from app.connectors.google_auth import MESSAGES, GoogleAuth, GoogleNotReady, not_ready_response
-from app.connectors.http import ConnectorError, get
-from app.models import CalendarEvent, PanelResponse
+from app.connectors.http import ConnectorError, get, send, single_write_client
+from app.models import CalendarEvent, EventDraft, PanelResponse
 
 API = "https://www.googleapis.com/calendar/v3/calendars"
+INSERT_URL = f"{API}/primary/events"
+CREATED_NOTE = "Criado pelo assistente pessoal, com a sua confirmação."
 CACHE_KEY = "gcal:events"
 TTL = 5 * 60
 MIN_FORCE_INTERVAL = 30
@@ -122,3 +128,57 @@ def parse_event(item: dict, settings: Settings) -> CalendarEvent | None:
         all_day=all_day,
         location=(item.get("location") or "").strip() or None,
     )
+
+
+# --- Criar evento (só depois da confirmação) ----------------------------------
+
+def event_body(draft: EventDraft, settings: Settings) -> dict:
+    if draft.all_day:
+        start = {"date": draft.start.date().isoformat()}
+        end = {"date": draft.end.date().isoformat()}  # o Google usa o fim exclusivo
+    else:
+        start = {"dateTime": draft.start.isoformat(), "timeZone": settings.timezone}
+        end = {"dateTime": draft.end.isoformat(), "timeZone": settings.timezone}
+    return {"summary": draft.title, "start": start, "end": end, "description": CREATED_NOTE}
+
+
+class EventNotSent(ConnectorError):
+    """Falhou antes de enviar o pedido ao Google: com certeza nada foi criado."""
+
+
+def create_event(draft: EventDraft, settings: Settings, cache: Cache, auth: GoogleAuth,
+                 http: httpx.Client | None = None) -> CalendarEvent:
+    """Cria o evento na agenda principal.
+
+    Erros sobem como `GoogleNotReady` (conexão ou permissão), `EventNotSent`
+    (nada saiu da máquina) ou `ConnectorError` (a resposta do Google).
+    """
+    try:
+        creds = auth.credentials()
+    except ConnectorError as exc:
+        raise EventNotSent(str(exc)) from None
+    if not auth.can_create_events():
+        raise GoogleNotReady("needs_write", MESSAGES["needs_write"])
+
+    client = http or single_write_client("POST", INSERT_URL)
+    try:
+        response = send(
+            client, "POST", INSERT_URL, what="a Agenda do Google",
+            status_messages={403: MESSAGES["needs_write"]},
+            headers={"Authorization": f"Bearer {creds.token}"}, json=event_body(draft, settings),
+        )
+    except ConnectorError as exc:
+        if exc.status == 401:
+            auth.mark_rejected()
+            raise GoogleNotReady("expired", MESSAGES["expired"]) from None
+        if exc.status == 403:
+            raise GoogleNotReady("needs_write", MESSAGES["needs_write"]) from None
+        raise
+    finally:
+        if http is None:
+            client.close()
+
+    # O painel da agenda busca de novo na próxima atualização
+    cache.delete(CACHE_KEY)
+    created = parse_event(response.json(), settings)
+    return created or CalendarEvent(id="", title=draft.title, start=draft.start, end=draft.end, all_day=draft.all_day)

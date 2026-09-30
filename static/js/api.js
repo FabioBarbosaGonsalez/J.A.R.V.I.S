@@ -5,6 +5,8 @@
 //   http://127.0.0.1:8000/?simular=todos:erro
 
 const TIMEOUT_MS = 15_000;
+// Chat e briefing podem esperar a IA (o chat faz até três chamadas seguidas)
+export const AI_TIMEOUT_MS = 70_000;
 const SIM_STATES = {
   erro: 'error',
   error: 'error',
@@ -35,13 +37,13 @@ export function panelUrl(name, path, { force = false } = {}) {
   return query ? `${path}?${query}` : path;
 }
 
-async function request(path, options = {}) {
+async function request(path, { timeoutMs = TIMEOUT_MS, ...options } = {}) {
   let response;
   try {
     response = await fetch(path, {
       ...options,
       headers: { Accept: 'application/json', ...options.headers },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     const message = err?.name === 'TimeoutError'
@@ -63,11 +65,12 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export const getJSON = (path) => request(path);
+export const getJSON = (path, { timeoutMs } = {}) => request(path, { timeoutMs });
 
-export const postJSON = (path, body) =>
+export const postJSON = (path, body, { timeoutMs } = {}) =>
   request(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    timeoutMs,
   });

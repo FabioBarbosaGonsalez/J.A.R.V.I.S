@@ -256,3 +256,46 @@ def test_google_routes_live(client, paths, monkeypatch):
     wait_login(auth)
     assert flows == [creds]
     assert client.post("/api/google/connect", headers={"origin": "https://evil.example"}).status_code == 403
+
+
+# --- Permissão de criar eventos (Fase 4) ----------------------------------------------
+
+def test_old_read_only_token_keeps_reading(paths):
+    """Conexões feitas antes da Fase 4 continuam lendo; só criar evento pede reconexão."""
+    creds, token = paths
+    write_token(token)
+    info = json.loads(token.read_text(encoding="utf-8"))
+    info["scopes"] = ["https://www.googleapis.com/auth/gmail.readonly",
+                      "https://www.googleapis.com/auth/calendar.readonly"]
+    token.write_text(json.dumps(info), encoding="utf-8")
+    auth = GoogleAuth(creds, token)
+
+    assert auth.status().state == "connected"
+    assert auth.credentials().scopes == info["scopes"]  # não força escopos novos na renovação
+    assert auth.can_create_events() is False
+
+
+def test_new_token_can_create_events(paths):
+    creds, token = paths
+    write_token(token)
+    assert GoogleAuth(creds, token).can_create_events() is True
+
+
+def test_saves_the_scopes_actually_granted(paths):
+    """No consentimento dá para desmarcar a Agenda: vale o que o Google concedeu."""
+    creds, token = paths
+    granted = ["https://www.googleapis.com/auth/gmail.readonly"]
+    login = Credentials(ACCESS, refresh_token="r", token_uri="https://oauth2.googleapis.com/token",
+                        client_id="id", client_secret="segredo", scopes=SCOPES, granted_scopes=granted)
+    auth = GoogleAuth(creds, token, run_flow=lambda path: login)
+
+    auth.start_connect()
+    wait_login(auth)
+
+    assert json.loads(token.read_text(encoding="utf-8"))["scopes"] == granted
+    assert auth.can_create_events() is False
+
+
+def test_gmail_stays_read_only():
+    assert "https://www.googleapis.com/auth/gmail.readonly" in SCOPES
+    assert not any("gmail" in s and not s.endswith(".readonly") for s in SCOPES)

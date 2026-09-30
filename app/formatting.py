@@ -2,6 +2,8 @@
 
 import unicodedata
 
+WEEKDAYS = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
+
 
 def brl(value: float) -> str:
     """1234.5 -> 'R$ 1.234,50'"""

@@ -3,6 +3,8 @@
 - Somente leitura por construção: qualquer método diferente de GET é recusado
   antes de sair da máquina. O token do Canvas, por exemplo, permitiria escrever
   na sua conta; este cliente garante que o painel nunca faça isso.
+- A única escrita (criar evento, com a sua confirmação) usa outro cliente,
+  `single_write_client`, que só aceita um método numa URL exata.
 - As mensagens de erro são escritas aqui, sem a URL: as exceções do httpx
   incluem a URL, e o link do feed iCal carrega um segredo.
 """
@@ -39,6 +41,25 @@ def read_only_client(**kwargs) -> httpx.Client:
     )
 
 
+def single_write_client(method: str, url: str, **kwargs) -> httpx.Client:
+    """Cliente que só faz uma operação de escrita: `method` na URL exata `url`.
+
+    Qualquer outra requisição (outra URL, outro método, até um GET) é recusada
+    antes de sair da máquina. Ex.: só criar evento na agenda principal, nunca
+    editar nem apagar.
+    """
+    def only_this(request: httpx.Request) -> None:
+        if request.method != method or str(request.url.copy_with(query=None)) != url:
+            raise ConnectorError("Bloqueado: operação de escrita não permitida.")
+
+    return httpx.Client(
+        timeout=TIMEOUT,
+        headers={"User-Agent": "assistente-hud/1.0 (uso pessoal)"},
+        event_hooks={"request": [only_this]},
+        **kwargs,
+    )
+
+
 def _body_message(response: httpx.Response) -> str | None:
     try:
         message = response.json().get("message")
@@ -47,9 +68,13 @@ def _body_message(response: httpx.Response) -> str | None:
     return message.strip()[:200] if isinstance(message, str) and message.strip() else None
 
 
-def get(http: httpx.Client, url: str, *, what: str, status_messages: dict[int, str] | None = None,
-        use_body_message: bool = False, **kwargs) -> httpx.Response:
-    """GET com erros traduzidos para mensagens curtas e sem segredos.
+def get(http: httpx.Client, url: str, **kwargs) -> httpx.Response:
+    return send(http, "GET", url, **kwargs)
+
+
+def send(http: httpx.Client, method: str, url: str, *, what: str, status_messages: dict[int, str] | None = None,
+         use_body_message: bool = False, **kwargs) -> httpx.Response:
+    """Requisição com erros traduzidos para mensagens curtas e sem segredos.
 
     `what` nomeia a fonte nas mensagens ("o Canvas", "a brapi").
     `status_messages` troca a mensagem padrão de códigos HTTP específicos.
@@ -57,7 +82,9 @@ def get(http: httpx.Client, url: str, *, what: str, status_messages: dict[int, s
     explica o problema (ex.: limite do plano). Nunca contém a URL nem o token.
     """
     try:
-        response = http.get(url, **kwargs)
+        response = http.request(method, url, **kwargs)
+    except ConnectorError:
+        raise  # bloqueada pelo próprio cliente
     except httpx.TimeoutException:
         raise ConnectorError(f"{_cap(what)} demorou demais para responder.") from None
     except httpx.HTTPError:

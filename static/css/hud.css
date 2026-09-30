@@ -657,6 +657,40 @@ body[data-state="speaking"] .core-state { color: var(--cyan-soft); }
 .msg-system p { color: var(--amber); font-size: 0.8rem; }
 .msg.is-interim p { color: var(--text-dim); font-style: italic; }
 
+/* ---------- Cartões de confirmação (ações propostas pela IA) ------------- */
+
+.msg-action { align-self: stretch; max-width: 100%; }
+.action-card {
+  position: relative;
+  display: grid; gap: 6px;
+  padding: 10px 12px 10px 14px;
+  background: rgba(76, 214, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.action-card::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 2px;
+  background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+}
+.action-kind { margin: 0; font: 500 0.64rem/1.2 var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan); }
+.action-title { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.action-details { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 0.8rem; }
+.action-details dt { color: var(--text-faint); }
+.action-details dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+.action-note { margin: 0; font-size: 0.74rem; color: var(--text-dim); }
+.action-note b { font-weight: 500; color: var(--cyan-soft); }
+.action-problem { margin: 0; font-size: 0.78rem; color: var(--amber); }
+.action-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.action-status { margin: 0; min-height: 1.1em; font-size: 0.72rem; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.action-card.is-done { border-color: rgba(95, 227, 161, 0.5); }
+.action-card.is-done::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.action-card.is-done .action-status { color: var(--green); }
+.action-card.is-closed { opacity: 0.6; }
+.action-card.is-closed::before { background: var(--text-faint); box-shadow: none; }
+.btn-ghost { background: transparent; border-color: var(--line); color: var(--text-dim); }
+.btn-ghost:hover { background: rgba(76, 214, 255, 0.06); box-shadow: none; color: var(--text); }
+.pf-actions { display: grid; gap: 10px; }
+
 .composer { display: flex; align-items: center; gap: 8px; }
 
 .chat-input {

@@ -8,6 +8,8 @@ google-auth>=2.30
 google-auth-oauthlib>=1.2
 # Leitura do feed de calendário do Canvas (plano B)
 icalendar>=6
+# IA: Google Gemini (SDK oficial)
+google-genai>=2.25
 # Banco de fusos horários (o Windows não traz o IANA tz database)
 tzdata>=2024.1
 

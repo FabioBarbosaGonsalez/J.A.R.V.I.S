@@ -1,5 +1,6 @@
 """Aplicação FastAPI: rotas da API e arquivos estáticos da interface."""
 
+import logging
 import mimetypes
 from datetime import datetime
 from typing import Annotated, Callable, Literal
@@ -10,11 +11,18 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import __version__, private, sources
+from app import __version__, actions, private, sources
 from app.config import STATIC_DIR, Settings, get_settings, secret
-from app.llm.briefing import build_rule_briefing
-from app.llm.chat import demo_reply
+from app.connectors.gcalendar import EventNotSent
+from app.connectors.google_auth import GoogleNotReady
+from app.connectors.http import ConnectorError
+from app.connectors.investments import PortfolioFileError
+from app.llm import provider as llm
+from app.llm.briefing import build_ai_briefing, build_rule_briefing
+from app.llm.chat import ai_reply, rule_reply
 from app.models import (
+    ActionResult,
+    AssetPreview,
     Briefing,
     CalendarEvent,
     ChatRequest,
@@ -36,6 +44,8 @@ mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
 
 LOCAL_HOSTNAMES = {"127.0.0.1", "localhost"}
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Assistente pessoal",
@@ -131,7 +141,7 @@ def google_status(settings: SettingsDep):
 
 @app.post("/api/google/connect", response_model=GoogleStatusResponse)
 def google_connect(settings: SettingsDep):
-    """Abre o consentimento do Google no navegador desta máquina (só leitura)."""
+    """Abre o consentimento do Google no navegador desta máquina (Gmail só leitura; Agenda ler e criar)."""
     if settings.demo_mode:
         return GoogleStatusResponse(state="demo")
     status = sources.get_google_auth(settings).start_connect()
@@ -209,22 +219,120 @@ def private_lock(request: Request):
     return response
 
 
-@app.get("/api/private/portfolio", response_model=PanelResponse[Portfolio])
-def private_portfolio(request: Request, settings: SettingsDep, response: Response):
-    response.headers.update(NO_STORE)
+def _private_denied(request: Request, settings: Settings) -> JSONResponse | None:
+    """Resposta de recusa se a aba privada estiver desativada ou bloqueada; None se liberada."""
     if not _access_key(settings):
         return JSONResponse({"detail": "Aba privada desativada."}, 403, headers=NO_STORE)
     if not _session_ok(request, settings):
         return JSONResponse({"detail": "Aba bloqueada."}, 401, headers=NO_STORE)
+    return None
+
+
+@app.get("/api/private/portfolio", response_model=PanelResponse[Portfolio])
+def private_portfolio(request: Request, settings: SettingsDep, response: Response):
+    response.headers.update(NO_STORE)
+    if denied := _private_denied(request, settings):
+        return denied
     return sources.portfolio_panel(settings)
 
 
+# --- Ações com confirmação ------------------------------------------------------
+# A IA só propõe (app.actions). Gravar exige o clique em Confirmar, que chama estas
+# rotas; o middleware já recusa POSTs vindos de outros sites.
+
+EXPIRED = "Este cartão expirou ou já foi usado. Peça de novo."
+
+
+def _proposal(action_id: str, kind: str, wrong_kind: str) -> actions.Proposal | JSONResponse:
+    proposal = actions.store.get(action_id)
+    if proposal is None:
+        return JSONResponse({"detail": EXPIRED}, 410, headers=NO_STORE)
+    if proposal.kind != kind:
+        return JSONResponse({"detail": wrong_kind}, 400, headers=NO_STORE)
+    # Retira da lista antes de executar: um segundo clique não grava de novo
+    return actions.store.take(action_id) or JSONResponse({"detail": EXPIRED}, 410, headers=NO_STORE)
+
+
+@app.post("/api/actions/{action_id}/confirm", response_model=ActionResult)
+def confirm_event(action_id: str, settings: SettingsDep):
+    proposal = _proposal(action_id, "event", "Confirme este ativo na aba Minha carteira.")
+    if isinstance(proposal, JSONResponse):
+        return proposal
+    try:
+        message = actions.confirm_event(proposal, settings, datetime.now(settings.tz))
+    except GoogleNotReady as exc:
+        actions.store.restore(proposal)  # nada foi criado: dá para tentar de novo
+        reconnect = exc.state in {"needs_write", "expired", "disconnected", "error"}
+        return ActionResult(ok=False, message=exc.message, action="google_reconnect" if reconnect else None)
+    except EventNotSent as exc:
+        actions.store.restore(proposal)
+        return ActionResult(ok=False, message=str(exc))
+    except ConnectorError as exc:
+        if exc.status and 400 <= exc.status < 500:
+            actions.store.restore(proposal)  # o Google recusou: nada foi criado
+            return ActionResult(ok=False, message=str(exc))
+        # Sem resposta clara (tempo esgotado, erro do Google): o evento pode ter sido criado
+        return ActionResult(ok=False, message=f"{exc} Confira na agenda se o evento foi criado antes de pedir de novo.")
+    return ActionResult(ok=True, message=message)
+
+
+@app.post("/api/actions/{action_id}/cancel", response_model=ActionResult)
+def cancel_action(action_id: str):
+    if not actions.store.cancel(action_id):
+        return JSONResponse({"detail": EXPIRED}, 410, headers=NO_STORE)
+    return ActionResult(ok=True, message="Cancelado. Nada foi gravado.")
+
+
+@app.get("/api/private/actions", response_model=list[AssetPreview])
+def private_actions(request: Request, settings: SettingsDep, response: Response):
+    """Ativos propostos pela IA, com o efeito na carteira. Só com a aba desbloqueada."""
+    response.headers.update(NO_STORE)
+    if denied := _private_denied(request, settings):
+        return denied
+    return [actions.asset_preview(p, settings) for p in actions.store.pending("asset")]
+
+
+@app.post("/api/private/actions/{action_id}/confirm", response_model=ActionResult)
+def confirm_asset(action_id: str, request: Request, settings: SettingsDep, response: Response):
+    response.headers.update(NO_STORE)
+    if denied := _private_denied(request, settings):
+        return denied
+    proposal = _proposal(action_id, "asset", "Este cartão é de um evento: confirme no chat.")
+    if isinstance(proposal, JSONResponse):
+        return proposal
+    try:
+        message = actions.confirm_asset(proposal, settings, datetime.now(settings.tz))
+    except PortfolioFileError as exc:
+        actions.store.restore(proposal)  # nada foi gravado
+        text = str(exc)
+        return ActionResult(ok=False, message=text[:1].upper() + text[1:])
+    return ActionResult(ok=True, message=message)
+
+
+def _ai_notice(exc: llm.LLMError, fallback: str) -> str:
+    """Aviso curto para quando a IA falha; o motivo detalhado fica só no log."""
+    log.warning("IA indisponível: %s", exc)
+    if isinstance(exc, llm.QuotaExceeded):
+        return f"A cota gratuita da IA acabou por enquanto. {fallback}"
+    return f"A IA está indisponível agora. {fallback}"
+
+
 @app.get("/api/briefing", response_model=PanelResponse[Briefing])
-def get_briefing(settings: SettingsDep, simulate: Simulate = None):
+def get_briefing(settings: SettingsDep, simulate: Simulate = None, force: Force = False):
     def load(s: Settings) -> PanelResponse[Briefing]:
         now = datetime.now(s.tz)
+        # As regras sempre rodam: geram os destaques e são o plano B do texto
         briefing = build_rule_briefing(sources.snapshot(s), now, s.user_name)
-        return PanelResponse(status="ok", source="demo" if s.demo_mode else "live", updated_at=now, data=briefing)
+        message = None
+        provider = llm.get_provider(s)
+        if provider is not None:
+            try:
+                briefing = build_ai_briefing(s, now, provider, sources.get_cache(), briefing.highlights, force=force)
+            except llm.LLMError as exc:
+                message = _ai_notice(exc, "Resumo gerado por regras.")
+        return PanelResponse(
+            status="ok", source="demo" if s.demo_mode else "live", updated_at=now, message=message, data=briefing,
+        )
 
     return _panel(load, settings, simulate)
 
@@ -232,5 +340,13 @@ def get_briefing(settings: SettingsDep, simulate: Simulate = None):
 @app.post("/api/chat", response_model=ChatResponse)
 def post_chat(body: ChatRequest, settings: SettingsDep):
     now = datetime.now(settings.tz)
-    reply = demo_reply(body.message, sources.snapshot(settings), now, settings.assistant_name, settings.user_name)
-    return ChatResponse(reply=reply, generator="demo")
+    notice = None
+    provider = llm.get_provider(settings)
+    if provider is not None:
+        try:
+            reply, cards = ai_reply(body.message, settings, now, provider)
+            return ChatResponse(reply=reply.text, generator="ai", actions=cards)
+        except llm.LLMError as exc:
+            notice = _ai_notice(exc, "Respondi com as regras básicas.")
+    reply = rule_reply(body.message, sources.snapshot(settings), now, settings.assistant_name, settings.user_name)
+    return ChatResponse(reply=reply, generator="rules", notice=notice)

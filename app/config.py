@@ -6,6 +6,7 @@ só quando alguém chama `.get_secret_value()` de propósito.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import Field, SecretStr
@@ -71,9 +72,17 @@ class Settings(BaseSettings):
     def google_token_path(self) -> Path:
         return BASE_DIR / self.google_token_file
 
-    # IA (Fase 4)
+    # IA (Fase 4). A abstração em app/llm/provider.py permite outros provedores depois.
+    llm_provider: Literal["gemini"] = "gemini"
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = ""
+    # Plano gratuito: 15 req/min e 500 req/dia, com chamada de funções
+    gemini_model: str = "gemini-3.5-flash-lite"
+    # Usado quando a cota do principal acaba. Mais capaz, mas só 5 req/min e 20 req/dia.
+    gemini_fallback_model: str = "gemini-3.8-flash"
+    # Rodadas de ferramentas por pergunta; cada uma gasta uma requisição a mais
+    llm_max_tool_rounds: int = Field(default=2, ge=0, le=5)
+    # O briefing da IA só é refeito quando os dados mudam, e no máximo a cada N minutos
+    ai_briefing_minutes: int = Field(default=30, ge=5, le=720)
 
     @property
     def tz(self) -> ZoneInfo:

@@ -65,6 +65,10 @@ class Cache:
                 (key, json.dumps(value, ensure_ascii=False), now, now + ttl_seconds),
             )
 
+    def delete(self, key: str) -> None:
+        with closing(self._connect()) as db, db:
+            db.execute("DELETE FROM cache WHERE key = ?", (key,))
+
     def increment(self, key: str, ttl_seconds: float) -> int:
         """Soma 1 a um contador (ex.: requisições do mês) e devolve o novo valor."""
         entry = self.get(key)
