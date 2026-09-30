@@ -84,13 +84,28 @@ Simulate = Annotated[
 ]
 
 
+UNEXPECTED = "Erro inesperado. Os detalhes aparecem no terminal do servidor."
+
+
 def _panel(load: Callable[[Settings], PanelResponse], settings: Settings, simulate: str | None) -> PanelResponse:
+    now = datetime.now(settings.tz)
     if simulate and settings.demo_mode:
-        now = datetime.now(settings.tz)
         if simulate == "error":
             return PanelResponse(status="error", updated_at=now, message="Falha simulada (modo demonstração).")
         return PanelResponse(status="not_configured", updated_at=now, message="Fonte não configurada (simulação).")
-    return load(settings)
+    try:
+        return load(settings)
+    except Exception:
+        # Um bug ou dado estranho numa fonte derruba só o painel dela
+        log.exception("Erro inesperado ao carregar um painel")
+        return PanelResponse(status="error", updated_at=now, message=UNEXPECTED)
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    """Qualquer outro erro: mensagem curta para a interface, detalhes (sem segredos) no terminal."""
+    log.error("Erro inesperado em %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse({"detail": UNEXPECTED}, status_code=500)
 
 
 # --- Interface ------------------------------------------------------------
@@ -330,6 +345,9 @@ def get_briefing(settings: SettingsDep, simulate: Simulate = None, force: Force 
                 briefing = build_ai_briefing(s, now, provider, sources.get_cache(), briefing.highlights, force=force)
             except llm.LLMError as exc:
                 message = _ai_notice(exc, "Resumo gerado por regras.")
+            except Exception:
+                log.exception("Erro inesperado no briefing da IA")
+                message = "A IA falhou ao montar o resumo. Resumo gerado por regras."
         return PanelResponse(
             status="ok", source="demo" if s.demo_mode else "live", updated_at=now, message=message, data=briefing,
         )
@@ -348,5 +366,8 @@ def post_chat(body: ChatRequest, settings: SettingsDep):
             return ChatResponse(reply=reply.text, generator="ai", actions=cards)
         except llm.LLMError as exc:
             notice = _ai_notice(exc, "Respondi com as regras básicas.")
+        except Exception:
+            log.exception("Erro inesperado no chat com IA")
+            notice = "A IA falhou ao responder. Respondi com as regras básicas."
     reply = rule_reply(body.message, sources.snapshot(settings), now, settings.assistant_name, settings.user_name)
     return ChatResponse(reply=reply, generator="rules", notice=notice)

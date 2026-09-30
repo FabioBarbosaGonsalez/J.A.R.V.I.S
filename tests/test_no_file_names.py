@@ -52,7 +52,7 @@ def test_terminal_hints_quiet_when_configured(monkeypatch, tmp_path):
     (tmp_path / "credentials.json").write_text("{}", encoding="utf-8")
     (tmp_path / "token.json").write_text("{}", encoding="utf-8")
     settings = make_settings(
-        demo_mode=False, canvas_token="t", brapi_token="b", portfolio_access_key="1234567890",
+        demo_mode=False, canvas_token="t", brapi_token="b", portfolio_access_key="1234567890", gemini_api_key="g",
         google_credentials_file=str(tmp_path / "credentials.json"), google_token_file=str(tmp_path / "token.json"))
     assert setup_hints(settings) == []
 
