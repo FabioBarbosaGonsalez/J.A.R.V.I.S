@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # O briefing da IA só é refeito quando os dados mudam, e no máximo a cada N minutos
     ai_briefing_minutes: int = Field(default=30, ge=5, le=720)
 
+    # "Olá, Jarvis" (escuta em segundo plano): confiança mínima para ativar.
+    # Mais alta = dispara menos por engano, mas pode não reconhecer você.
+    wake_min_confidence: float = Field(default=0.6, ge=0.5, le=0.99)
+
     @property
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)

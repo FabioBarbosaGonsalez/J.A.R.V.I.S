@@ -4,7 +4,7 @@ Assistente pessoal que roda **localmente no Windows** e reúne num painel único
 
 > Projeto pessoal de fã, sem afiliação com Marvel ou Disney. O visual é inspirado na ideia de um assistente em HUD, mas tudo foi criado do zero em CSS, SVG e canvas: nenhum logo, imagem, som ou voz de filme é usado.
 
-> **Status: Fase 5 de 6.** O assistente está completo: painéis com dados reais, IA com ferramentas, ações com confirmação, tratamento de erros e inicialização com um clique. Falta só a Fase 6, de extras visuais e de voz.
+> **Status: Fase 5 de 6.** O assistente está completo: painéis com dados reais, IA com ferramentas, ações com confirmação, tratamento de erros, inicialização com um clique e abertura por voz ("Olá, Jarvis"). Falta só a Fase 6, de extras visuais e de voz.
 
 <!-- Espaço reservado: adicione aqui um print ou GIF do painel -->
 <!-- ![Painel HUD](docs/painel.png) -->
@@ -15,6 +15,7 @@ Assistente pessoal que roda **localmente no Windows** e reúne num painel único
 - [Roteiro](#roteiro)
 - [Instalação manual](#instalação-manual)
 - [Usando o painel](#usando-o-painel)
+- [Abrir por voz: "Olá, Jarvis"](#abrir-por-voz-olá-jarvis)
 - [Configuração (`.env`)](#configuração-env)
 - [Conectando suas fontes](#conectando-suas-fontes): [Canvas](#canvas-faculdade), [Google](#google-gmail-e-agenda), [Mercado](#mercado-dólar-e-cotações-da-carteira), [Minha carteira](#aba-privada-minha-carteira), [IA](#ia-google-gemini), [Ações pelo chat](#criar-compromissos-e-inserir-ativos-pelo-chat)
 - [Solução de problemas](#solução-de-problemas)
@@ -102,6 +103,37 @@ http://127.0.0.1:8000/?simular=todos:erro
 
 Nomes aceitos: `briefing`, `calendar`, `email`, `canvas`, `market` e `todos`. Estados aceitos: `erro` e `nao_configurado`.
 
+## Abrir por voz: "Olá, Jarvis"
+
+Com a escuta instalada, basta dizer **"Olá, Jarvis"** com o notebook ligado e desbloqueado, mesmo com tudo fechado. Se o servidor não estiver rodando, ele inicia sozinho (sem janela) e o painel abre no navegador. Se já estiver, o painel só abre de novo.
+
+```powershell
+.\escuta.ps1 -Instalar
+```
+
+Isso prepara o ambiente, baixa o modelo de voz em português (31 MB, uma vez só), faz a escuta ligar sempre que você entrar no Windows e já começa a ouvir. Outros comandos:
+
+| Comando | O que faz |
+|---------|-----------|
+| `.\escuta.ps1 -Testar` | Mostra ao vivo o que o microfone ouve. Use para conferir se ele reconhece a sua voz. |
+| `.\escuta.ps1 -Status` | Diz se a escuta está instalada, ouvindo e com o modelo baixado. |
+| `.\escuta.ps1 -Parar` | Para de ouvir agora e libera o microfone (volta no próximo login). |
+| `.\escuta.ps1 -Iniciar` | Volta a ouvir agora. |
+| `.\escuta.ps1 -PararServidor` | Fecha o servidor que a escuta abriu (ele roda sem janela). |
+| `.\escuta.ps1 -Remover` | Para de ouvir e não liga mais sozinha. |
+
+**Como funciona e o que esperar:**
+
+- **Reconhecimento 100% local**, com o [Vosk](https://alphacephei.com/vosk/) e o modelo pequeno de português (licença Apache 2.0). O áudio não é gravado nem sai do computador. O reconhecedor fica limitado à frase de ativação, então não "entende" o resto da conversa.
+- **Só com o Windows desbloqueado.** Com o notebook bloqueado ou dormindo, ele não ouve.
+- **O microfone fica em uso** enquanto a escuta roda, e o Windows mostra o ícone de microfone na barra de tarefas. Para liberar, use `-Parar`.
+- **Consumo:** cerca de 150 MB de memória e 6% de um núcleo do processador (medido num notebook de 20 núcleos, cerca de 0,3% do total).
+- **"Jarvis" não existe no vocabulário do modelo.** "Jarbas" existe e soa quase igual, então é assim que ele aparece no `-Testar`. O "Jarbas" sozinho nunca ativa: ele precisa vir depois do "Olá" (com ou sem a pausa da vírgula, até 2 segundos) e ser a última palavra. Diga só "Olá, Jarvis" e pare: "Olá. O Jarbas chegou" não ativa.
+- **Contra ativações por engano**, uma segunda checagem ouve de novo o trecho quando a frase aparece. Se ela ouvir "já" seguido de um verbo comum ("Oi, já vou", "Olha, já vai começar"), não ativa. Depois de ativar, repetições são ignoradas por 15 segundos.
+- **Precisão:** com áudios sintetizados, reconheceu 14 de 14 "Olá, Jarvis" (sem pausa, com pausas de até 1,2 s e com ruído moderado) e não ativou em nenhuma de 31 frases parecidas. Com ruído forte (TV alta, muita gente falando), o reconhecimento cai. A sua voz real pode se sair diferente: confira com `-Testar` e ajuste `WAKE_MIN_CONFIDENCE` no `.env` (mais baixo reconhece mais fácil; mais alto dispara menos por engano).
+- **O painel abre no navegador padrão.** A voz do painel funciona no Chrome e no Edge. Os navegadores só deixam a página falar depois de um clique, então a primeira resposta falada vem depois que você interagir.
+- O registro da escuta fica em `data/logs/escuta.log`, e o do servidor aberto por ela, em `data/logs/servidor.log`, ambos fora do Git.
+
 ## Configuração (`.env`)
 
 | Variável | Para que serve | Padrão |
@@ -130,6 +162,7 @@ Nomes aceitos: `briefing`, `calendar`, `email`, `canvas`, `market` e `todos`. Es
 | `GEMINI_FALLBACK_MODEL` | Modelo usado quando a cota do principal acaba ou ele está sobrecarregado | `gemini-3.8-flash` |
 | `LLM_MAX_TOOL_ROUNDS` | Rodadas de ferramentas por pergunta (0 a 5); cada uma gasta uma requisição | `2` |
 | `AI_BRIEFING_MINUTES` | Intervalo mínimo para refazer o briefing da IA quando os dados mudam (5 a 720) | `30` |
+| `WAKE_MIN_CONFIDENCE` | "Olá, Jarvis": confiança mínima para ativar (0.5 a 0.99) | `0.6` |
 
 Se algum valor for inválido (por exemplo, `PORT=abc`), o servidor não inicia e o terminal diz qual variável corrigir, sem mostrar o valor digitado.
 
@@ -317,6 +350,9 @@ Por texto ou voz, peça algo como "marque estudo de Cálculo amanhã às 19h" ou
 | O cartão de evento pede **Reconectar Google** | A conexão salva é antiga (só leitura) ou a Agenda foi desmarcada na autorização. Reconecte e permita o acesso à Agenda. |
 | "A cota gratuita da IA acabou por enquanto" | Espere um minuto (limite por minuto) ou até o dia seguinte (limite diário). Enquanto isso, as regras respondem. |
 | "A planilha da carteira está aberta em outro programa" | Feche o arquivo no Excel e clique em Confirmar de novo. O cartão continua valendo até expirar. |
+| "Olá, Jarvis" não abre nada | Rode `.\escuta.ps1 -Status` e `.\escuta.ps1 -Testar`. Confira se o Windows permite que aplicativos da área de trabalho usem o microfone (**Configurações → Privacidade e segurança → Microfone**). Se o teste mostra "quase" com o jarbas abaixo do limite, diminua `WAKE_MIN_CONFIDENCE` (ex.: 0.5). |
+| O painel abre sozinho por engano | Aumente `WAKE_MIN_CONFIDENCE` no `.env` (ex.: 0.8) e rode `.\escuta.ps1 -Parar` e `-Iniciar`. Para desligar de vez, `.\escuta.ps1 -Remover`. |
+| Quero fechar o servidor que a escuta abriu | `.\escuta.ps1 -PararServidor`. |
 | "O Canvas recusou o token" | O token expirou ou foi bloqueado. Gere um novo no Canvas ou use o feed do calendário como plano B. |
 
 ## Testes
@@ -326,7 +362,7 @@ Por texto ou voz, peça algo como "marque estudo de Cálculo amanhã às 19h" ou
 python -m pytest
 ```
 
-Os testes não usam a rede nem os seus arquivos: todas as APIs (Canvas, brapi, AwesomeAPI, Google e Gemini) são simuladas, e o cache, a carteira e o histórico ficam em pastas temporárias. Eles cobrem, entre outras coisas: cada conector e seus erros, o cache com reserva, a aba privada, o laço de ferramentas da IA, os cartões de confirmação (expiração, uso único, bloqueio de outros sites), a gravação na carteira com backup, o filtro de segredos nos logs, a inicialização e a regra de que a interface nunca cita nomes de arquivos.
+Os testes não usam a rede nem os seus arquivos: todas as APIs (Canvas, brapi, AwesomeAPI, Google e Gemini) são simuladas, e o cache, a carteira e o histórico ficam em pastas temporárias. Eles cobrem, entre outras coisas: cada conector e seus erros, o cache com reserva, a aba privada, o laço de ferramentas da IA, os cartões de confirmação (expiração, uso único, bloqueio de outros sites), a gravação na carteira com backup, o filtro de segredos nos logs, a inicialização, a regra de ativação do "Olá, Jarvis" e a regra de que a interface nunca cita nomes de arquivos.
 
 ## Estrutura
 
@@ -343,12 +379,14 @@ jarvis/
 │   ├── formatting.py      # formatação em português (R$, %, durações)
 │   ├── private.py         # chave e sessões da aba "Minha carteira"
 │   ├── actions.py         # propostas de ação: expiram, valem uma vez e só gravam com o clique em Confirmar
+│   ├── wake.py            # "Olá, Jarvis": escuta local em segundo plano que abre o painel
 │   ├── connectors/        # canvas, gmail, gcalendar, google_auth, brapi, fx, investments, portfolio_write, http, demo
 │   └── llm/               # provider.py (camada do Gemini), tools.py (ferramentas), chat.py e briefing.py
 ├── static/                # index.html, css/hud.css, js/ (módulos ES, sem framework)
 ├── data/                  # carteira.example.csv (a sua carteira, backups, cache e histórico ficam fora do Git)
 ├── tests/
 ├── iniciar.ps1            # prepara o ambiente e abre o painel
+├── escuta.ps1             # instala, testa e controla a escuta do "Olá, Jarvis"
 ├── .env.example
 └── requirements.txt
 ```
@@ -368,7 +406,8 @@ jarvis/
 - O login do Google acontece no seu navegador, direto com o Google; o painel nunca vê a sua senha. O acesso salvo (`token.json`) fica fora do Git e pode ser revogado apagando o arquivo.
 - O cache (`data/cache.sqlite3`) guarda só o que aparece nos painéis e fica fora do Git.
 - **IA:** só é chamada com `GEMINI_API_KEY` configurada. As ferramentas enviam ao Gemini um resumo mínimo dos dados, e a carteira vai só em percentuais (veja [IA (Google Gemini)](#ia-google-gemini)). As instruções do modelo mandam ignorar comandos escritos em assuntos de e-mail ou títulos de eventos. Mesmo que um e-mail tente manipular a IA, ela só consegue ler e propor: nada é gravado sem o seu clique. A conversa fica só na memória do servidor e some ao reiniciar.
-- **Voz:** no Chrome e no Edge, o reconhecimento de fala envia o áudio ao serviço online do próprio navegador (Google ou Microsoft). A síntese de fala usa as vozes do Windows ou do navegador.
+- **Voz:** no Chrome e no Edge, o reconhecimento de fala do painel envia o áudio ao serviço online do próprio navegador (Google ou Microsoft). A síntese de fala usa as vozes do Windows ou do navegador.
+- **"Olá, Jarvis":** a escuta em segundo plano reconhece a frase no próprio computador, sem internet, e não grava áudio. Ela só abre o painel: nada é lido, enviado ou gravado por comando de voz, e a aba "Minha carteira" continua exigindo a chave. Só uma escuta roda por vez, e ela só funciona com o Windows desbloqueado.
 
 ## Decisões técnicas
 

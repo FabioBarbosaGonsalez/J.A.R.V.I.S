@@ -10,6 +10,9 @@ google-auth-oauthlib>=1.2
 icalendar>=6
 # IA: Google Gemini (SDK oficial)
 google-genai>=2.25
+# "Olá, Jarvis": reconhecimento de voz offline e acesso ao microfone
+vosk>=0.3.45
+sounddevice>=0.5
 # Banco de fusos horários (o Windows não traz o IANA tz database)
 tzdata>=2024.1
 

@@ -3,6 +3,7 @@
 # Uso, na pasta do projeto:
 #   .\iniciar.ps1                  inicia e abre o navegador
 #   .\iniciar.ps1 -SemNavegador    inicia sem abrir o navegador
+#   .\iniciar.ps1 -SomentePreparar só prepara o ambiente, sem iniciar (usado pelo escuta.ps1)
 #
 # Na primeira vez, cria o ambiente virtual (.venv) e instala as dependências.
 # Depois, só reinstala quando o requirements.txt muda. Se não houver .env,
@@ -10,7 +11,8 @@
 # Para encerrar o servidor, aperte Ctrl+C nesta janela.
 
 param(
-    [switch]$SemNavegador
+    [switch]$SemNavegador,
+    [switch]$SomentePreparar
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +75,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.env'))) {
     Escrever 'Criei o arquivo .env a partir do modelo. O painel abre no modo demonstração;' 'Yellow'
     Escrever 'para usar seus dados, siga o README e mude DEMO_MODE=false no .env.' 'Yellow'
 }
+
+if ($SomentePreparar) { exit 0 }
 
 # --- 4. Servidor -----------------------------------------------------------------------
 
